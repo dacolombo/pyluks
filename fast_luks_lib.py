@@ -187,7 +187,11 @@ def check_cryptsetup():
     
     _, _, dmsetup_status = run_command('type -P dmsetup &>/dev/null')
     if dmsetup_status != 0:
-        echo('INFO', 'dmsetup is not installed. Installing...') # TODO: add install device_mapper
+        echo('INFO', 'dmsetup is not installed. Installing...')
+        if DISTNAME == 'ubuntu':
+            run_command('apt-get install -y dmsetup')
+        else:
+            run_command('yum install -y device-mapper')
     
     _, _, cryptsetup_status = run_command('type -P cryptsetup &>/dev/null')
     if cryptsetup_status != 0:
