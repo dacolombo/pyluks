@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 from datetime import datetime
 import re
+import zc.lockfile
+from configparser import ConfigParser
 
 
 ################################################################################
@@ -125,14 +127,44 @@ def run_command(cmd, log_stderr_stdout = False):
 
 #____________________________________
 # Lock/UnLock Section
-# http://wiki.bash-hackers.org/howto/mutex
-# "trap -l" for signal summary
-# TODO: def lock():
+def lock(LOCKFILE):
+
+    # Start locking attempt
+    try:
+        lock = zc.lockfile.LockFile(LOCKFILE, content_template='{pid};{hostname}') # storing the PID and hostname in LOCKFILE
+        return lock
+    except zc.lockfile.LockError:
+        # Lock failed: retrieve the PID of the locking process
+        with open(LOCKFILE, 'r') as lock_file:
+            pid_hostname = lock_file.readline()
+            PID = re.search(r'^\s(\d+);', pid_hostname).group()
+        echo_error(f'Another script instance is active: PID {PID}')
+        exit(2)
+
+    # if lock is stale, remove it and restart
+    # this is probably not needed: if the process is closed (it does not respond to kill -0) and the 
+    # file is still present, it's not locked so it can be locked by the function.
+    #try:
+    #    os.kill(PID, 0)
+    #except OSError:
+    #    # lock is stale, remove it and restart
+    #    echo_debug(f'Removing fake lock file of nonexistant PID {PID}')
+    #    os.remove(LOCKFILE)
+    #    echo_debug('Restarting luks script')
+    #   TODO: re-run script
+
+    # lock is valid and OTHERPID is active - exit, we're locked!
+    echo_error(f'Lock failed, PID {PID} is active')
+    echo_error(f'Another {STAT} process is active')
+    echo_error(f'If you are sure {STAT} is not already running,')
+    echo_error(f'You can remove {LOCKFILE} and restart {STAT}')
+    exit(2)
 
 
 #____________________________________
-# TODO: def unlock(){
-
+def unlock(lock, LOCKFILE):
+    lock.close()
+    os.remove(LOCKFILE)
 
 
 #____________________________________
@@ -203,7 +235,7 @@ def check_vol(mountpoint, device):
             logs_error('Please check logfile:')
             logs_error(f'No device mounted to {mountpoint}')
             run_command('df -h', log_stderr_stdout=True)
-            # unlock()
+            unlock(lock, LOCKFILE)
             exit(1)
 
 #____________________________________
@@ -234,14 +266,8 @@ def create_random_secret(passphrase_length):
 
 
 #____________________________________
-# Unset sensitive variables
-# Is this needed?
-# TODO: def unset_variables()
-
-
-#____________________________________
 def setup_device(device, cryptdev, mountpoint, filesystem, #vault_url, wrapping_token, secret_path, user_key,
-                 luks_header_backup_dir, luks_header_backup_file, cipher_algorithm='aes-xts-plain64', keysize=256,
+                 luks_header_backup_dir, luks_header_backup_file, lock, LOCKFILE, cipher_algorithm='aes-xts-plain64', keysize=256,
                  hash_algorithm='sha256', passphrase_length=None, passphrase=None, passphrase_confirmation=None):
     echo_info('Start the encryption procedure.')
     logs_info(f'Using {cipher_algorithm} algorithm to luksformat the volume.')
@@ -250,23 +276,20 @@ def setup_device(device, cryptdev, mountpoint, filesystem, #vault_url, wrapping_
     logs_debug('Cryptsetup full command:')
     logs_debug('cryptsetup -v --cipher $cipher_algorithm --key-size $keysize --hash $hash_algorithm --iter-time 2000 --use-urandom --verify-passphrase luksFormat $device --batch-mode')
 
-    if 'passphrase_length' == None:
-        if 'passphrase' == None:
+    if passphrase_length == None:
+        if passphrase == None:
             echo_error("Missing passphrase!")
-            # unset_variables()
-            # unlock()
+            unlock(lock, LOCKFILE)
             exit(1)
-        if 'passphrase_confirmation' == None:
+        if passphrase_confirmation == None:
             echo_error('Missing confirmation passphrase!')
-            # unset_variables()
-            # unlock()
+            unlock(lock, LOCKFILE)
             exit(1)
         if passphrase == passphrase_confirmation:
             s3cret = passphrase
         else:
-            echo_error('No matching passprhases!')
-            # unset_variables()
-            # unlock()
+            echo_error('No matching passphrases!')
+            unlock(lock, LOCKFILE)
             exit(1)
     else:
         s3cret = create_random_secret(passphrase_length)
@@ -296,7 +319,7 @@ def setup_device(device, cryptdev, mountpoint, filesystem, #vault_url, wrapping_
         logs_error(f'Command cryptsetup failed with exit code {luksHeaderBackup_ec}! Mounting {device} to {mountpoint} and exiting.')
         if luksHeaderBackup_ec == 2:
              echo_error('Bad passphrase. Please try again.')
-        # unlock()
+        unlock(lock, LOCKFILE)
         exit(luksHeaderBackup_ec)
 
 #____________________________________
@@ -307,7 +330,7 @@ def open_device(cryptdev, s3cret, device, mountpoint):
         if openec != 0:
             if openec == 2:
                 echo_error('Bad passphrase. Please try again.')
-                # unlock()
+                unlock(lock, LOCKFILE)
                 exit(openec)
             else:
                 echo_error(f'Crypt device already exists! Please check logs: {LOGFILE}')
@@ -315,7 +338,7 @@ def open_device(cryptdev, s3cret, device, mountpoint):
                 logs_error(f'/dev/mapper/{cryptdev} already exists.')
                 logs_error(f'Mounting {device} to {mountpoint} again.')
                 run_command(f'mount {device} {mountpoint}', log_stderr_stdout=True)
-                # unlock()
+                unlock(lock, LOCKFILE)
                 exit(1)
 
 
@@ -352,7 +375,7 @@ def create_fs(filesystem, cryptdev):
     if mkfs_ec != 0:
         echo_error(f'While creating {filesystem} filesystem. Please check logs: {LOGFILE}')
         echo_error('Command mkfs failed!')
-        # unlock()
+        unlock(lock, LOCKFILE)
         exit(1)
 
 
@@ -373,7 +396,7 @@ def create_cryptdev_ini_file(luks_cryptdev_file, device, cipher_algorithm, hash_
     
     luksUUID, _, _ = run_command(f'cryptsetup luksUUID {device}')
 
-    with open(luks_cryptdev_file, 'a') as luks_cryptdev_file:
+    with open(luks_cryptdev_file, 'w') as luks_cryptdev_file:
         luks_cryptdev_file.write(f"""# This file has been generated using fast_luks.sh script
 # https://github.com/mtangaro/galaxycloud-testing/blob/master/fast_luks.sh
 # The device name could change after reboot, please use UUID instead.
@@ -392,7 +415,8 @@ cryptdev = {cryptdev}
 mapper = /dev/mapper/{cryptdev}
 mountpoint = {mountpoint}
 filesystem = {filesystem}
-header_path = {luks_header_backup_dir}/{luks_header_backup_file}""")
+header_path = {luks_header_backup_dir}/{luks_header_backup_file}
+""")
     
     run_command(f'dmsetup info /dev/mapper/{cryptdev}', log_stderr_stdout=True)
     run_command(f'cryptsetup luksDump {device}', log_stderr_stdout=True)
@@ -436,13 +460,14 @@ def load_default_config():
         luks_header_backup='/tmp/luks-header.bck'
 
 
-
 #____________________________________
 # Read ini file
-# TODO: def cfg.parser()
-# http://theoldschooldevops.com/2008/02/09/bash-ini-parser/
+def read_ini_file(cryptdev_ini_file):
+    config = ConfigParser()
+    config.read_file(open(cryptdev_ini_file))
+    luks_section = config['luks']
+    return {key:luks_section[key] for key in luks_section}
 
-# TODO: def read_ini_file()
 
 #____________________________________
 # TODO: def create_vault_env()
