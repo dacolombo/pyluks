@@ -54,14 +54,14 @@ def intro():
 # WARNING
 # ERROR
 
-# Echo functions
-
+# Check if loglevel is valid
 def check_loglevel(loglevel):
     valid_loglevels = ['INFO','DEBUG','WARNING','ERROR']
     if loglevel not in valid_loglevels:
         raise ValueError(f'loglevel must be one of {valid_loglevels}')
 
 
+# Echo function
 def echo(loglevel, text):
     check_loglevel(loglevel)
     message = f'{loglevel} {time} {text}\n'
@@ -69,7 +69,7 @@ def echo(loglevel, text):
     return message
 
 
-# Logs functions
+# Logs function
 def logs(loglevel, text):
     check_loglevel(loglevel)
     with open(LOGFILE, 'a+') as log:
@@ -283,10 +283,11 @@ def setup_device(device, cryptdev, mountpoint, filesystem, #vault_url, wrapping_
     cryptsetup_cmd = f'printf "{s3cret}\n" | cryptsetup -v --cipher {cipher_algorithm} --key-size {keysize} --hash {hash_algorithm} --iter-time 2000 --use-urandom luksFormat {device} --batch-mode'
     run_command(cryptsetup_cmd)
 
-    #create_vault_env()
-    #write_secret_to_vault_command = f'python3 ./write_secret_to_vault.py -v {vault_url} -w {wrapping_token} -s {secret_path} --key {user_key} --value {s3cret}'
-    #write_secret_to_vault_proc = run_command(write_secret_to_vault_command)
-    #delete_vault_env()
+    # Create vault venv and write the secret to vault under it
+    venv_dir = create_vault_env()
+    write_secret_to_vault_command = f'{venv_dir}/bin/python3 ./write_secret_to_vault.py -v {vault_url} -w {wrapping_token} -s {secret_path} --key {user_key} --value {s3cret}'
+    run_command(write_secret_to_vault_command)
+    delete_vault_env()
 
     # Backup LUKS header
     os.mkdir(luks_header_backup_dir)
@@ -454,9 +455,20 @@ def read_ini_file(cryptdev_ini_file):
 
 
 #____________________________________
-# TODO: def create_vault_env()
+def create_vault_env(venv_dir='/tmp/vault_venv'):
+    # Run vault python script in a specific virtual environment
+    echo('INFO', 'Write LUKS passphrase to Hashicorp Vault')
+    
+    logs('DEBUG', 'Remove ansible virtualenv if exists')
+    shutil.rmtree(venv_dir, ignore_errors=True)
+
+    logs('DEBUG', 'Create virtualenv')
+    venv.create(venv_dir, with_pip=True)
+    return venv_dir
 
 
 #____________________________________
-# TODO: def delete_vault_env()
+def delete_vault_env(venv='/tmp/vault_venv'):
+    echo('INFO', 'Delete Vault virtual environment')    
+    shutil.rmtree(venv)
 
