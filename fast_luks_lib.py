@@ -379,10 +379,6 @@ def mount_vol(cryptdev, mountpoint):
 #____________________________________
 def create_cryptdev_ini_file(luks_cryptdev_file, device, cipher_algorithm, hash_algorithm, keysize, cryptdev, mountpoint,
                              filesystem, luks_header_backup_dir, luks_header_backup_file):
-    if not os.path.isfile(luks_cryptdev_file):
-        logs('DEBUG', f'Create {luks_cryptdev_file}')
-        run_command(f'install -D /dev/null {luks_cryptdev_file}')
-    
     luksUUID, _, _ = run_command(f'cryptsetup luksUUID {device}')
 
     with open(luks_cryptdev_file, 'w') as luks_cryptdev_file:
