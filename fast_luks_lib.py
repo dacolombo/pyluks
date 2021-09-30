@@ -12,8 +12,11 @@ from datetime import datetime
 import re
 import zc.lockfile
 from configparser import ConfigParser
-import venv
-
+import requests
+# https://stackoverflow.com/questions/27981545/suppress-insecurerequestwarning-unverified-https-request-is-being-made-in-pytho
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+import json
 
 ################################################################################
 # VARIABLES
@@ -124,18 +127,6 @@ def lock(LOCKFILE):
             PID = re.search(r'^\s(\d+);', pid_hostname).group()
         echo('ERROR', f'Another script instance is active: PID {PID}')
         exit(2)
-
-    # if lock is stale, remove it and restart
-    # this is probably not needed: if the process is closed (it does not respond to kill -0) and the 
-    # file is still present, it's not locked so it can be locked by the function.
-    #try:
-    #    os.kill(PID, 0)
-    #except OSError:
-    #    # lock is stale, remove it and restart
-    #    echo('DEBUG',f'Removing fake lock file of nonexistant PID {PID}')
-    #    os.remove(LOCKFILE)
-    #    echo('DEBUG','Restarting luks script')
-    #   TODO: re-run script
 
     # lock is valid and OTHERPID is active - exit, we're locked!
     echo('ERROR', f'Lock failed, PID {PID} is active')
@@ -254,7 +245,7 @@ def create_random_secret(passphrase_length):
 
 
 #____________________________________
-def setup_device(device, cryptdev, mountpoint, filesystem, #vault_url, wrapping_token, secret_path, user_key,
+def setup_device(device, cryptdev, mountpoint, filesystem, vault_url, wrapping_token, secret_path, user_key,
                  luks_header_backup_dir, luks_header_backup_file, lock, LOCKFILE, cipher_algorithm='aes-xts-plain64', keysize=256,
                  hash_algorithm='sha256', passphrase_length=None, passphrase=None, passphrase_confirmation=None):
     echo('INFO', 'Start the encryption procedure.')
@@ -287,11 +278,8 @@ def setup_device(device, cryptdev, mountpoint, filesystem, #vault_url, wrapping_
     cryptsetup_cmd = f'printf "{s3cret}\n" | cryptsetup -v --cipher {cipher_algorithm} --key-size {keysize} --hash {hash_algorithm} --iter-time 2000 --use-urandom luksFormat {device} --batch-mode'
     run_command(cryptsetup_cmd)
 
-    # Create vault venv and write the secret to vault under it
-    venv_dir = create_vault_env()
-    write_secret_to_vault_command = f'{venv_dir}/bin/python3 ./write_secret_to_vault.py -v {vault_url} -w {wrapping_token} -s {secret_path} --key {user_key} --value {s3cret}'
-    run_command(write_secret_to_vault_command)
-    delete_vault_env()
+    # Write the secret to vault under it
+    write_secret_to_vault(vault_url, wrapping_token, secret_path, user_key, s3cret)
 
     # Backup LUKS header
     os.mkdir(luks_header_backup_dir)
@@ -455,20 +443,71 @@ def read_ini_file(cryptdev_ini_file):
 
 
 #____________________________________
-def create_vault_env(venv_dir='/tmp/vault_venv'):
-    # Run vault python script in a specific virtual environment
-    echo('INFO', 'Write LUKS passphrase to Hashicorp Vault')
-    
-    logs('DEBUG', 'Remove ansible virtualenv if exists')
-    shutil.rmtree(venv_dir, ignore_errors=True)
+def unwrap_vault_token(url, wrapping_token):
+    url = url + '/v1/sys/wrapping/unwrap'
+    headers = { "X-Vault-Token": wrapping_token }
 
-    logs('DEBUG', 'Create virtualenv')
-    venv.create(venv_dir, with_pip=True)
-    return venv_dir
+    response = requests.post(url, headers=headers, verify=False)
+    response.raise_for_status()
+    deserialized_response = json.loads(response.text)
+
+    try:
+        deserialized_response["auth"]["client_token"]
+    except KeyError:
+        raise Exception("[FATAL] Unable to unwrap vault token.")
+
+    return deserialized_response["auth"]["client_token"]
 
 
 #____________________________________
-def delete_vault_env(venv='/tmp/vault_venv'):
-    echo('INFO', 'Delete Vault virtual environment')    
-    shutil.rmtree(venv)
 
+def post_secret(url, path, token, key, value):
+    url = url + '/v1/secrets/data/' + path
+    headers = { "X-Vault-Token": token }
+    data = '{ "options": { "cas": 0 }, "data": { "'+key+'": "'+value+'"} }'
+
+    response = requests.post(url, headers=headers, data=data, verify=False)
+    response.raise_for_status()
+    deserialized_response = json.loads(response.text)
+
+    try:
+        deserialized_response["data"]
+    except KeyError:
+        raise Exception("[FATAL] Unable to write vault path.")
+
+    return deserialized_response
+
+
+def parse_response(response):
+    if not response["data"]["created_time"]:
+        raise Exception("No cretation time")
+
+    if response["data"]["destroyed"] != False:
+        raise Exception("Token already detroyed")
+
+    if response["data"]["version"] != 1:
+        raise Exception("Token not at 1st verion")
+
+    if response["data"]["deletion_time"] != "":
+        raise Exception("Token aready deleted")
+
+    return 0
+
+
+#______________________________________
+def revoke_token(url, token):
+    url = url + '/v1/auth/token/revoke-self'
+    headers = { "X-Vault-Token": token }
+    response = requests.post( url, headers=headers, verify=False )
+
+
+def write_secret_to_vault(vault_url, wrapping_token, secret_path, user_key, user_value):
+    # Check vault
+    r = requests.get(vault_url)
+    r.raise_for_status()
+
+    write_token = unwrap_vault_token(vault_url, wrapping_token)
+    response_output = post_secret(vault_url, secret_path, write_token, user_key, user_value)
+    parse_response(response_output)
+
+    revoke_token(vault_url, write_token)
