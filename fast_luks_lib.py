@@ -2,6 +2,7 @@
 
 
 # import dependencies
+import logging
 import random
 from string import ascii_letters, digits, ascii_lowercase
 import subprocess
@@ -72,11 +73,8 @@ def echo(loglevel, text):
     return message
 
 
-# Logs function
-def logs(loglevel, text):
-    check_loglevel(loglevel)
-    with open(LOGFILE, 'a+') as log:
-        log.write(echo(loglevel, text))
+# Logs config
+logging.basicConfig(filename=LOGFILE, filemode='a+', level=0, format='%(levelname)s %(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
 
 #________________________________
@@ -194,25 +192,25 @@ def check_cryptsetup():
 #____________________________________
 # Check volume 
 def check_vol(mountpoint, device):
-    logs('DEBUG', 'Checking storage volume.')
+    logging.debug('Checking storage volume.')
 
     #num_mountpoint, _, _ = run_command(f'mount | grep -c {mountpoint}')
     if os.path.ismount(mountpoint):
         device, _, _ = run_command(f'df -P {mountpoint} | tail -1 | cut -d" " -f 1')
-        logs('DEBUG', f'Device name: {device}')
+        logging.debug(f'Device name: {device}')
 
     else:
         if Path.is_block_device(Path(device)):
-            logs('DEBUG', f'External volume on {device}. Using it for encryption.')
+            logging.debug(f'External volume on {device}. Using it for encryption.')
             if not os.path.isdir(mountpoint):
-                logs('DEBUG', f'Creating {mountpoint}')
+                logging.debug(f'Creating {mountpoint}')
                 os.makedirs(mountpoint, exist_ok=True)
-                logs('DEBUG', f'Device name: {device}')
-                logs('DEBUG', f'Mountpoint: {mountpoint}')
+                logging.debug(f'Device name: {device}')
+                logging.debug(f'Mountpoint: {mountpoint}')
         else:
-            logs('ERROR', 'Device not mounted, exiting!')
-            logs('ERROR', 'Please check logfile:')
-            logs('ERROR', f'No device mounted to {mountpoint}')
+            logging.error('Device not mounted, exiting!')
+            logging.error('Please check logfile:')
+            logging.error(f'No device mounted to {mountpoint}')
             run_command('df -h', log_stderr_stdout=True)
             unlock(lock, LOCKFILE)
             exit(1)
@@ -221,10 +219,10 @@ def check_vol(mountpoint, device):
 # Check if the volume is already encrypted.
 # If yes, skip the encryption
 def lsblk_check(device):
-    logs('DEBUG', 'Checking if the volume is already encrypted.')
+    logging.debug('Checking if the volume is already encrypted.')
     devices, _, _ = run_command('lsblk -p -o NAME,FSTYPE')
     if re.search(f'{device}\s+crypto_LUKS', devices):
-            logs('INFO', 'The volume is already encrypted')
+            logging.info('The volume is already encrypted')
             return True
     else:
         return False
@@ -233,9 +231,9 @@ def lsblk_check(device):
 #____________________________________
 # Umount volume
 def umount_vol(mountpoint, device):
-    logs('INFO', 'Umounting device.')
+    logging.info('Umounting device.')
     run_command(f'umount {mountpoint}', log_stderr_stdout=True)
-    logs('INFO', f'{device} umounted, ready for encryption!')
+    logging.info(f'{device} umounted, ready for encryption!')
 
 
 #____________________________________
@@ -249,11 +247,12 @@ def setup_device(device, cryptdev, mountpoint, filesystem, vault_url, wrapping_t
                  luks_header_backup_dir, luks_header_backup_file, lock, LOCKFILE, cipher_algorithm='aes-xts-plain64', keysize=256,
                  hash_algorithm='sha256', passphrase_length=None, passphrase=None, passphrase_confirmation=None):
     echo('INFO', 'Start the encryption procedure.')
-    logs('INFO', f'Using {cipher_algorithm} algorithm to luksformat the volume.')
-    logs('DEBUG', 'Start cryptsetup')
+    logging.info()
+    logging.info(f'Using {cipher_algorithm} algorithm to luksformat the volume.')
+    logging.debug('Start cryptsetup')
     info(device, cipher_algorithm, hash_algorithm, keysize, cryptdev, mountpoint, filesystem)
-    logs('DEBUG', 'Cryptsetup full command:')
-    logs('DEBUG', 'cryptsetup -v --cipher $cipher_algorithm --key-size $keysize --hash $hash_algorithm --iter-time 2000 --use-urandom --verify-passphrase luksFormat $device --batch-mode')
+    logging.debug('Cryptsetup full command:')
+    logging.debug('cryptsetup -v --cipher $cipher_algorithm --key-size $keysize --hash $hash_algorithm --iter-time 2000 --use-urandom --verify-passphrase luksFormat $device --batch-mode')
 
     if passphrase_length == None:
         if passphrase == None:
@@ -293,7 +292,7 @@ def setup_device(device, cryptdev, mountpoint, filesystem, vault_url, wrapping_t
         # 3 out of memory
         # 4 wrong device specified
         # 5 device already exists or device is busy.
-        logs('ERROR', f'Command cryptsetup failed with exit code {luksHeaderBackup_ec}! Mounting {device} to {mountpoint} and exiting.')
+        logging.error(f'Command cryptsetup failed with exit code {luksHeaderBackup_ec}! Mounting {device} to {mountpoint} and exiting.')
         if luksHeaderBackup_ec == 2:
              echo('ERROR', 'Bad passphrase. Please try again.')
         unlock(lock, LOCKFILE)
@@ -311,9 +310,9 @@ def open_device(cryptdev, s3cret, device, mountpoint):
                 exit(openec)
             else:
                 echo('ERROR', f'Crypt device already exists! Please check logs: {LOGFILE}')
-                logs('ERROR', 'Unable to luksOpen device.')
-                logs('ERROR', f'/dev/mapper/{cryptdev} already exists.')
-                logs('ERROR', f'Mounting {device} to {mountpoint} again.')
+                logging.error('Unable to luksOpen device.')
+                logging.error(f'/dev/mapper/{cryptdev} already exists.')
+                logging.error(f'Mounting {device} to {mountpoint} again.')
                 run_command(f'mount {device} {mountpoint}', log_stderr_stdout=True)
                 unlock(lock, LOCKFILE)
                 exit(1)
@@ -321,7 +320,7 @@ def open_device(cryptdev, s3cret, device, mountpoint):
 
 #____________________________________
 def encryption_status(cryptdev):
-    logs('INFO', f'Check {cryptdev} status with cryptsetup status')
+    logging.info(f'Check {cryptdev} status with cryptsetup status')
     run_command(f'cryptsetup -v status {cryptdev}', log_stderr_stdout=True)
 
 
@@ -335,19 +334,19 @@ def encryption_status(cryptdev):
 # To prevent cryptographic attacks or unwanted file recovery, this data is ideally indistinguishable from data later written by dm-crypt.
 def wipe_data():
     echo('INFO', 'Paranoid mode selected. Wiping disk')
-    logs('INFO', 'Wiping disk data by overwriting the entire drive with random data.')
-    logs('INFO', 'This might take time depending on the size & your machine!')
+    logging.info('Wiping disk data by overwriting the entire drive with random data.')
+    logging.info('This might take time depending on the size & your machine!')
     
     run_command(f'dd if=/dev/zero of=/dev/mapper/{cryptdev} bs=1M status=progress')
     
-    logs('INFO', f'Block file /dev/mapper/{cryptdev} created.')
-    logs('INFO', 'Wiping done.')
+    logging.info(f'Block file /dev/mapper/{cryptdev} created.')
+    logging.info('Wiping done.')
 
 
 #____________________________________
 def create_fs(filesystem, cryptdev):
     echo('INFO', 'Creating filesystem.')
-    logs('INFO', f'Creating {filesystem} filesystem on /dev/mapper/{cryptdev}')
+    logging.info(f'Creating {filesystem} filesystem on /dev/mapper/{cryptdev}')
     _, _, mkfs_ec = run_command(f'mkfs -t {filesystem} /dev/mapper/{cryptdev}', log_stderr_stdout=True)
     if mkfs_ec != 0:
         echo('ERROR', f'While creating {filesystem} filesystem. Please check logs: {LOGFILE}')
@@ -359,7 +358,7 @@ def create_fs(filesystem, cryptdev):
 #____________________________________
 def mount_vol(cryptdev, mountpoint):
     echo('INFO', 'Mounting encrypted device.')
-    logs('INFO', f'Mounting /dev/mapper/{cryptdev} to {mountpoint}')
+    logging.info(f'Mounting /dev/mapper/{cryptdev} to {mountpoint}')
     run_command(f'mount /dev/mapper/{cryptdev} {mountpoint}', log_stderr_stdout=True)
     run_command('df -Hv', log_stderr_stdout=True)
 
@@ -414,10 +413,10 @@ def end_volume_setup_procedure(SUCCESS_FILE):
 #____________________________________
 def load_default_config():
     if os.path.isfile('./defaults.conf'):
-        logs('INFO', 'Loading default configuration from defaults.conf')
+        logging.info('Loading default configuration from defaults.conf')
         import defaults.conf
     else:
-        logs('INFO', 'No defaults.conf file found. Loading built-in variables.')
+        logging.info('No defaults.conf file found. Loading built-in variables.')
         global cipher_algorithm, keysize, hash_algorithm, device, cryptdev, mountpoint, filesystem, paranoid, non_interactive, foreground, luks_cryptdev_file, luks_header_backup
         cipher_algorithm='aes-xts-plain64'
         keysize=256
