@@ -84,8 +84,8 @@ logging.basicConfig(filename=LOGFILE, filemode='a+', level=0, format='%(levelnam
 try:
     with open('/etc/os-release', 'r') as f:
         os_file = f.read()
-        regex = r'\sID="(\w+)"'
-        ID = re.findall(regex, os_file)[0]
+        regex = r'\sID="?(\w+)"?\n'
+        re.search(regex, os_file).group()
         DISTNAME = 'ubuntu' if ID == 'ubuntu' else 'centos'
 except FileNotFoundError:
     print("Not running a distribution with /etc/os-release available")
