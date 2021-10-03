@@ -85,7 +85,7 @@ try:
     with open('/etc/os-release', 'r') as f:
         os_file = f.read()
         regex = r'\sID="?(\w+)"?\n'
-        re.search(regex, os_file).group()
+        ID = re.search(regex, os_file).group()
         DISTNAME = 'ubuntu' if ID == 'ubuntu' else 'centos'
 except FileNotFoundError:
     print("Not running a distribution with /etc/os-release available")
