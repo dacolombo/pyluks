@@ -1,1 +1,1 @@
-from .fastluks import *
+from .fast_luks_lib import *
