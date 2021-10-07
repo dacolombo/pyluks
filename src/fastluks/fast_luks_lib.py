@@ -5,7 +5,6 @@ from string import ascii_letters, digits, ascii_lowercase
 import subprocess
 import os
 from pathlib import Path
-import shutil
 from datetime import datetime
 import re
 import zc.lockfile
