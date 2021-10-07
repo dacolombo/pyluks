@@ -468,7 +468,7 @@ class device:
         logging.info(f'Check {self.cryptdev} status with cryptsetup status')
         run_command(f'cryptsetup -v status {self.cryptdev}', log_stderr_stdout=True)
     
-    def create_cryptdev_ini_file(self, now, cipher_algorithm, hash_algorithm, keysize, luksUUID, luks_header_backup_dir, luks_header_backup_file):
+    def create_cryptdev_ini_file(self, now, cipher_algorithm, hash_algorithm, keysize, luks_header_backup_dir, luks_header_backup_file):
         luksUUID, _, _ = run_command(f'cryptsetup luksUUID {self.device_name}')
 
         with open(luks_cryptdev_file, 'w') as f:
