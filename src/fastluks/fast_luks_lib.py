@@ -557,7 +557,7 @@ def main_script(device_name='/dev/vdb', cryptdev='crypt', mountpoint='/export', 
                 luks_header_backup_file='luks-header.bck', luks_cryptdev_file='/etc/luks/luks-cryptdev.ini',
                 passphrase_length=8, passphrase=None, passphrase_confirmation=None):
     
-    device = fastluks.device(device_name, cryptdev, mountpoint, filesystem)
+    device = device(device_name, cryptdev, mountpoint, filesystem)
     
     LOCKFILE = '/var/run/fast-luks-encryption.lock'
     SUCCESS_FILE = '/var/run/fast-luks-encryption.success'
@@ -566,7 +566,7 @@ def main_script(device_name='/dev/vdb', cryptdev='crypt', mountpoint='/export', 
                    LOCKFILE, SUCCESS_FILE, luks_cryptdev_file, passphrase_length, passphrase, passphrase_confirmation)
                    # vault_url, wrapping_token, secret_path, user_key
 
-    variables = fastluks.read_ini_file(luks_cryptdev_file)
+    variables = read_ini_file(luks_cryptdev_file)
     luksUUID = variables['uuid']
     LOCKFILE = '/var/run/fast-luks-volume-setup.lock'
     SUCCESS_FILE = '/var/run/fast-luks-volume-setup.success'
