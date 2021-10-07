@@ -337,7 +337,7 @@ def write_secret_to_vault(vault_url, wrapping_token, secret_path, user_key, user
 
 #____________________________________
 # Used in setup_device
-def check_passphrase(passphrase, passphrase_confirmation, passphrase_length):
+def check_passphrase(passphrase_length, passphrase, passphrase_confirmation):
     if passphrase_length == None:
         if passphrase == None:
             echo('ERROR', "Missing passphrase!")
@@ -410,7 +410,7 @@ class device:
 
     def setup_device(self, luks_header_backup_dir, luks_header_backup_file, cipher_algorithm, keysize, hash_algorithm,
                     # vault_url, wrapping_token, secret_path, user_key
-                    passphrase, passphrase_confirmation, passphrase_length):
+                    passphrase_length, passphrase, passphrase_confirmation):
             echo('INFO', 'Start the encryption procedure.')
             logging.info(f'Using {cipher_algorithm} algorithm to luksformat the volume.')
             logging.debug('Start cryptsetup')
@@ -418,7 +418,7 @@ class device:
             logging.debug('Cryptsetup full command:')
             logging.debug('cryptsetup -v --cipher $cipher_algorithm --key-size $keysize --hash $hash_algorithm --iter-time 2000 --use-urandom --verify-passphrase luksFormat $device --batch-mode')
 
-            s3cret = check_passphrase(passphrase, passphrase_confirmation, passphrase_length)
+            s3cret = check_passphrase(passphrase_length, passphrase, passphrase_confirmation)
             if s3cret == False:
                 return False # TODO: unlock and exit
             
