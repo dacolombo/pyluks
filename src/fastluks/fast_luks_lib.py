@@ -383,7 +383,7 @@ class device:
                 logging.error('Device not mounted, exiting! Please check logfile:')
                 logging.error(f'No device mounted to {self.mountpoint}')
                 run_command('df -h', log_stderr_stdout=True)
-                # TODO: unlock and terminate process
+                return False # TODO: unlock and terminate process
     
     def is_encrypted(self):
         logging.debug('Checking if the volume is already encrypted.')
