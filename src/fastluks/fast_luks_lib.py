@@ -217,25 +217,41 @@ def end_volume_setup_procedure(SUCCESS_FILE):
 
 
 #____________________________________
-def load_default_config():
-    if os.path.isfile('./defaults.conf'):
+def load_default_config(defaults_file='./defaults.conf'):
+    global cipher_algorithm, keysize, hash_algorithm, device, cryptdev, mountpoint, filesystem, paranoid, non_interactive, foreground, luks_cryptdev_file, luks_header_backup
+
+    if os.path.isfile(defaults_file):
         logging.info('Loading default configuration from defaults.conf')
-        import defaults.conf
+        config = ConfigParser()
+        config.read_file(open(defaults_file))
+        defaults = config['defaults']
+        cipher_algorithm = defaults['cipher_algorithm']
+        keysize = defaults['keysize']
+        hash_algorithm = defaults['hash_algorithm']
+        device = defaults['device']
+        cryptdev = defaults['cryptdev']
+        mountpoint = defaults['mountpoint']
+        filesystem = defaults['filesystem']
+        paranoid = defaults['paranoid']
+        non_interactive = defaults['non_interactive']
+        foreground = defaults['foreground']
+        luks_cryptdev_file = defaults['luks_cryptdev_file']
+        luks_header_backup = defaults['luks_header_backup']
+    
     else:
         logging.info('No defaults.conf file found. Loading built-in variables.')
-        global cipher_algorithm, keysize, hash_algorithm, device, cryptdev, mountpoint, filesystem, paranoid, non_interactive, foreground, luks_cryptdev_file, luks_header_backup
-        cipher_algorithm='aes-xts-plain64'
-        keysize=256
-        hash_algorithm='sha256'
-        device='/dev/vdb'
-        cryptdev='crypt'
-        mountpoint='/export'
-        filesystem='ext4'
-        paranoid=False
-        non_interactive=False
-        foreground=False
-        luks_cryptdev_file='/tmp/luks-cryptdev.ini'
-        luks_header_backup='/tmp/luks-header.bck'
+        cipher_algorithm = 'aes-xts-plain64'
+        keysize = 256
+        hash_algorithm = 'sha256'
+        device = '/dev/vdb'
+        cryptdev = 'crypt'
+        mountpoint = '/export'
+        filesystem = 'ext4'
+        paranoid = False
+        non_interactive = False
+        foreground = False
+        luks_cryptdev_file = '/tmp/luks-cryptdev.ini'
+        luks_header_backup = '/tmp/luks-header.bck'
 
 
 #____________________________________
