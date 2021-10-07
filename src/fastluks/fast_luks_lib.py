@@ -557,19 +557,19 @@ def main_script(device_name='/dev/vdb', cryptdev='crypt', mountpoint='/export', 
                 luks_header_backup_file='luks-header.bck', luks_cryptdev_file='/etc/luks/luks-cryptdev.ini',
                 passphrase_length=8, passphrase=None, passphrase_confirmation=None):
     
-    device = device(device_name, cryptdev, mountpoint, filesystem)
+    device_to_encrypt = device(device_name, cryptdev, mountpoint, filesystem)
     
     LOCKFILE = '/var/run/fast-luks-encryption.lock'
     SUCCESS_FILE = '/var/run/fast-luks-encryption.success'
     
-    device.encrypt(cipher_algorithm, keysize, hash_algorithm, luks_header_backup_dir, luks_header_backup_file, 
-                   LOCKFILE, SUCCESS_FILE, luks_cryptdev_file, passphrase_length, passphrase, passphrase_confirmation)
-                   # vault_url, wrapping_token, secret_path, user_key
+    device_to_encrypt.encrypt(cipher_algorithm, keysize, hash_algorithm, luks_header_backup_dir, luks_header_backup_file, 
+                              LOCKFILE, SUCCESS_FILE, luks_cryptdev_file, passphrase_length, passphrase, passphrase_confirmation)
+                              # vault_url, wrapping_token, secret_path, user_key
 
     variables = read_ini_file(luks_cryptdev_file)
     luksUUID = variables['uuid']
     LOCKFILE = '/var/run/fast-luks-volume-setup.lock'
     SUCCESS_FILE = '/var/run/fast-luks-volume-setup.success'
 
-    device.volume_setup(cipher_algorithm, hash_algorithm, keysize, luksUUID, luks_header_backup_dir,
+    device_to_encrypt.volume_setup(cipher_algorithm, hash_algorithm, keysize, luksUUID, luks_header_backup_dir,
                         luks_header_backup_file, LOCKFILE, SUCCESS_FILE)
