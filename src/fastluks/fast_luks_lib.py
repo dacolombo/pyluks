@@ -1,4 +1,3 @@
-#! /usr/bin/env python3
 
 
 # import dependencies
@@ -133,9 +132,17 @@ def lock(LOCKFILE):
 
 
 #____________________________________
-def unlock(lock, LOCKFILE):
+def unlock(lock, LOCKFILE, do_exit=True):
     lock.close()
     os.remove(LOCKFILE)
+    if do_exit:
+        exit()
+
+
+#____________________________________
+def unlock_if_false(function_return, lock, LOCKFILE):
+    if not function_return:
+        fastluks.unlock(lock, LOCKFILE)
 
 
 #____________________________________
@@ -318,17 +325,14 @@ def check_passphrase(passphrase, passphrase_confirmation, passphrase_length):
     if passphrase_length == None:
         if passphrase == None:
             echo('ERROR', "Missing passphrase!")
-            #unlock(lock, LOCKFILE)
             return False
         if passphrase_confirmation == None:
             echo('ERROR', 'Missing confirmation passphrase!')
-            #unlock(lock, LOCKFILE)
             return False
         if passphrase == passphrase_confirmation:
             s3cret = passphrase
         else:
             echo('ERROR', 'No matching passphrases!')
-            #unlock(lock, LOCKFILE)
             return False
     else:
             s3cret = create_random_secret(passphrase_length)
@@ -388,8 +392,8 @@ class device:
     def luksOpen(self, s3cret):
         return run_command(f'printf "{s3cret}\n" | cryptsetup luksOpen {self.device_name} {self.cryptdev}')
 
-    def setup_device(self, vault_url, wrapping_token, secret_path, user_key, luks_header_backup_dir,
-                    luks_header_backup_file, lock, LOCKFILE, cipher_algorithm, keysize, hash_algorithm,
+    def setup_device(self, luks_header_backup_dir, luks_header_backup_file, cipher_algorithm, keysize, hash_algorithm,
+                    # vault_url, wrapping_token, secret_path, user_key
                     passphrase=None, passphrase_confirmation=None, passphrase_length=None):
             echo('INFO', 'Start the encryption procedure.')
             logging.info(f'Using {cipher_algorithm} algorithm to luksformat the volume.')
@@ -406,7 +410,7 @@ class device:
             luksFormat(self, s3cret, cipher_algorithm, keysize, hash_algorithm)
 
             # Write the secret to vault
-            write_secret_to_vault(vault_url, wrapping_token, secret_path, user_key, s3cret)
+            # write_secret_to_vault(vault_url, wrapping_token, secret_path, user_key, s3cret)
 
             # Backup LUKS header
             os.mkdir(luks_header_backup_dir)
@@ -423,7 +427,9 @@ class device:
                 logging.error(f'Command cryptsetup failed with exit code {luksHeaderBackup_ec}! Mounting {self.device_name} to {self.mountpoint} and exiting.')
                 if luksHeaderBackup_ec == 2:
                     echo('ERROR', 'Bad passphrase. Please try again.')
-                # TODO: unlock and exit
+                return False # TODO: unlock and exit
+
+            return s3cret
     
     def open_device(self, s3cret):
         echo('INFO', 'Open LUKS volume')
@@ -433,20 +439,20 @@ class device:
             if openec != 0:
                 if openec == 2:
                     echo('ERROR', 'Bad passphrase. Please try again.')
-                    # TODO: unlock and exit
+                    return False # TODO: unlock and exit
                 else:
                     echo('ERROR', f'Crypt device already exists! Please check logs: {LOGFILE}')
                     logging.error('Unable to luksOpen device.')
                     logging.error(f'/dev/mapper/{self.cryptdev} already exists.')
                     logging.error(f'Mounting {self.device_name} to {self.mountpoint} again.')
                     run_command(f'mount {self.device_name} {self.mountpoint}', log_stderr_stdout=True)
-                    # TODO: unlock and exit
+                    return False # TODO: unlock and exit
     
     def encryption_status(self):
         logging.info(f'Check {self.cryptdev} status with cryptsetup status')
         run_command(f'cryptsetup -v status {self.cryptdev}', log_stderr_stdout=True)
     
-    def create_cryptdev_ini_file(self, now, cipher_algorithm, has_algorithm, keysize, luksUUID, luks_header_backup_dir, luks_header_backup_file):
+    def create_cryptdev_ini_file(self, now, cipher_algorithm, hash_algorithm, keysize, luksUUID, luks_header_backup_dir, luks_header_backup_file):
         luksUUID, _, _ = run_command(f'cryptsetup luksUUID {self.device_name}')
 
         with open(luks_cryptdev_file, 'w') as f:
@@ -490,9 +496,9 @@ class device:
         if mkfs_ec != 0:
             echo('ERROR', f'While creating {self.filesystem} filesystem. Please check logs.')
             echo('ERROR', 'Command mkfs failed!')
-            # TODO: unlock and exit
+            return False #TODO: unlock and exit
     
-    def mount_volume(self):
+    def mount_vol(self):
         echo('INFO', 'Mounting encrypted device.')
         logging.info(f'Mounting /dev/mapper/{self.cryptdev} to {self.mountpoint}')
         run_command(f'mount /dev/mapper/{self.cryptdev} {self.mountpoint}', log_stderr_stdout=True)
