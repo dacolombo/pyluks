@@ -235,21 +235,6 @@ def load_default_config(defaults_file='./defaults.conf'):
         foreground = defaults['foreground']
         luks_cryptdev_file = defaults['luks_cryptdev_file']
         luks_header_backup = defaults['luks_header_backup']
-    
-    else:
-        logging.info('No defaults.conf file found. Loading built-in variables.')
-        cipher_algorithm = 'aes-xts-plain64'
-        keysize = 256
-        hash_algorithm = 'sha256'
-        device = '/dev/vdb'
-        cryptdev = 'crypt'
-        mountpoint = '/export'
-        filesystem = 'ext4'
-        paranoid = False
-        non_interactive = False
-        foreground = False
-        luks_cryptdev_file = '/tmp/luks-cryptdev.ini'
-        luks_header_backup = '/tmp/luks-header.bck'
 
 
 #____________________________________
@@ -569,8 +554,8 @@ class device:
 
 
 def main_script(device_name='/dev/vdb', cryptdev='crypt', mountpoint='/export', filesystem='ext4',
-                cipher_algorithm='aes-xts-plain64', keysize=256, hash_algorithm='sha256', luks_header_backup_dir='/tmp',
-                luks_header_backup_file='luks-header.bck', luks_cryptdev_file='/tmp/luks-cryptdev.ini',
+                cipher_algorithm='aes-xts-plain64', keysize=256, hash_algorithm='sha256', luks_header_backup_dir='/etc/luks',
+                luks_header_backup_file='luks-header.bck', luks_cryptdev_file='/etc/luks/luks-cryptdev.ini',
                 passphrase_length=8, passphrase=None, passphrase_confirmation=None):
     
     device = fastluks.device(device_name, cryptdev, mountpoint, filesystem)
