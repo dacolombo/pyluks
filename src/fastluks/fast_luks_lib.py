@@ -141,7 +141,7 @@ def unlock(lock, LOCKFILE, do_exit=True):
 
 #____________________________________
 def unlock_if_false(function_return, lock, LOCKFILE):
-    if not function_return:
+    if function_return == False:
         unlock(lock, LOCKFILE)
 
 
