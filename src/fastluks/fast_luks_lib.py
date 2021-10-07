@@ -1,5 +1,3 @@
-
-
 # import dependencies
 import logging
 import random
@@ -568,3 +566,26 @@ class device:
         end_volume_setup_procedure(SUCCESS_FILE) # Volume setup finished. Print end dialogue
 
         unlock(locked, LOCKFILE, do_exit=False) # Unlock once done
+
+
+def main_script(device_name='/dev/vdb', cryptdev='crypt', mountpoint='/export', filesystem='ext4',
+                cipher_algorithm='aes-xts-plain64', keysize=256, hash_algorithm='sha256', luks_header_backup_dir='/tmp',
+                luks_header_backup_file='luks-header.bck', luks_cryptdev_file='/tmp/luks-cryptdev.ini',
+                passphrase_length=8, passphrase=None, passphrase_confirmation=None):
+    
+    device = fastluks.device(device_name, cryptdev, mountpoint, filesystem)
+    
+    LOCKFILE = '/var/run/fast-luks-encryption.lock'
+    SUCCESS_FILE = '/var/run/fast-luks-encryption.success'
+    
+    device.encrypt(cipher_algorithm, keysize, hash_algorithm, luks_header_backup_dir, luks_header_backup_file, 
+                   LOCKFILE, SUCCESS_FILE, luks_cryptdev_file, passphrase_length, passphrase, passphrase_confirmation)
+                   # vault_url, wrapping_token, secret_path, user_key
+
+    variables = fastluks.read_ini_file(luks_cryptdev_file)
+    luksUUID = variables['uuid']
+    LOCKFILE = '/var/run/fast-luks-volume-setup.lock'
+    SUCCESS_FILE = '/var/run/fast-luks-volume-setup.success'
+
+    device.volume_setup(cipher_algorithm, hash_algorithm, keysize, luksUUID, luks_header_backup_dir,
+                        luks_header_backup_file, LOCKFILE, SUCCESS_FILE)
