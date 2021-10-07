@@ -429,7 +429,8 @@ class device:
             # write_secret_to_vault(vault_url, wrapping_token, secret_path, user_key, s3cret)
 
             # Backup LUKS header
-            os.mkdir(luks_header_backup_dir)
+            if not os.path.isdir(luks_header_backup_dir):
+                os.mkdir(luks_header_backup_dir)
             _, _, luksHeaderBackup_ec = self.luksHeaderBackup(luks_header_backup_dir, luks_header_backup_file)
 
             if luksHeaderBackup_ec != 0:
