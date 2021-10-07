@@ -520,3 +520,51 @@ class device:
         logging.info(f'Mounting /dev/mapper/{self.cryptdev} to {self.mountpoint}')
         run_command(f'mount /dev/mapper/{self.cryptdev} {self.mountpoint}', log_stderr_stdout=True)
         run_command('df -Hv', log_stderr_stdout=True)
+
+    def encrypt(self, cipher_algorithm, keysize, hash_algorithm, luks_header_backup_dir, luks_header_backup_file, 
+               LOCKFILE, SUCCESS_FILE, luks_cryptdev_file, # vault_url, wrapping_token, secret_path, user_key,
+               passphrase_length, passphrase, passphrase_confirmation):
+        
+        locked = lock(LOCKFILE) # Create lock file
+
+        cryptdev = create_random_cryptdev_name() # Assign random name to cryptdev
+
+        check_cryptsetup() # Check that cryptsetup and dmsetup are installed
+
+        unlock_if_false(self.check_vol(), locked, LOCKFILE) # Check which virtual volume is mounted to mountpoint, unlock and exit if it's not mounted
+
+        if not self.is_encrypted(): # Check if the volume is encrypted, if it's not start the encryption procedure
+            self.umount_vol()
+            s3cret = self.setup_device(luks_header_backup_dir, luks_header_backup_file, cipher_algorithm, keysize, hash_algorithm,
+                                        # vault_url, wrapping_token, secret_path, user_key,
+                                        passphrase_length, passphrase, passphrase_confirmation)
+            unlock_if_false(s3cret, locked, LOCKFILE)
+
+            with open('./s3cret_file','w') as sf: # TODO: !!!!!! REMOVE THIS AFTER TROUBLESHOOTING !!!!!!
+                sf.write(s3cret)
+        
+        unlock_if_false(self.open_device(s3cret), locked, LOCKFILE) # Create mapping
+
+        self.encryption_status() # Check status
+
+        self.create_cryptdev_ini_file(luks_cryptdev_file, cipher_algorithm, hash_algorithm, keysize, luks_header_backup_dir, luks_header_backup_file) # Create ini file
+
+        end_encrypt_procedure(SUCCESS_FILE) # LUKS encryption finished. Print end dialogue.
+
+        unlock(locked, LOCKFILE, do_exit=False) # Unlock
+    
+    def volume_setup(self, cipher_algorithm, hash_algorithm, keysize, luksUUID, luks_header_backup_dir,
+                     luks_header_backup_file, LOCKFILE, SUCCESS_FILE):
+        
+        locked = lock(LOCKFILE) # Create lock file
+
+        unlock_if_false(self.create_fs(), locked, LOCKFILE) # Create filesystem
+
+        self.mount_vol() # Mount volume
+
+        self.create_cryptdev_ini_file(now, cipher_algorithm, hash_algorithm, keysize, luksUUID,
+                                      luks_header_backup_dir, luks_header_backup_file) # Update ini file
+        
+        end_volume_setup_procedure(SUCCESS_FILE) # Volume setup finished. Print end dialogue
+
+        unlock(locked, LOCKFILE, do_exit=False) # Unlock once done
