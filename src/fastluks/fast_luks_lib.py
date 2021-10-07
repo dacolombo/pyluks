@@ -410,7 +410,7 @@ class device:
 
     def setup_device(self, luks_header_backup_dir, luks_header_backup_file, cipher_algorithm, keysize, hash_algorithm,
                     # vault_url, wrapping_token, secret_path, user_key
-                    passphrase=None, passphrase_confirmation=None, passphrase_length=None):
+                    passphrase, passphrase_confirmation, passphrase_length):
             echo('INFO', 'Start the encryption procedure.')
             logging.info(f'Using {cipher_algorithm} algorithm to luksformat the volume.')
             logging.debug('Start cryptsetup')
