@@ -423,14 +423,14 @@ class device:
                 return False # TODO: unlock and exit
             
             # Start encryption procedure
-            luksFormat(self, s3cret, cipher_algorithm, keysize, hash_algorithm)
+            self.luksFormat(s3cret, cipher_algorithm, keysize, hash_algorithm)
 
             # Write the secret to vault
             # write_secret_to_vault(vault_url, wrapping_token, secret_path, user_key, s3cret)
 
             # Backup LUKS header
             os.mkdir(luks_header_backup_dir)
-            _, _, luksHeaderBackup_ec = luksHeaderBackup(self, luks_header_backup_dir, luks_header_backup_file)
+            _, _, luksHeaderBackup_ec = self.luksHeaderBackup(luks_header_backup_dir, luks_header_backup_file)
 
             if luksHeaderBackup_ec != 0:
                 # Cryptsetup returns 0 on success and a non-zero value on error.
@@ -450,7 +450,7 @@ class device:
     def open_device(self, s3cret):
         echo('INFO', 'Open LUKS volume')
         if not Path(f'/dev/mapper{self.cryptdev}').is_block_device():
-            _, _, openec = luksOpen(self, s3cret)
+            _, _, openec = self.luksOpen(s3cret)
             
             if openec != 0:
                 if openec == 2:
