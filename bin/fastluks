@@ -1,5 +1,5 @@
 #! /usr/bin/env python3
-import fastluks
+from fastluks import main_script
 import argparse
 
 #______________________________________
@@ -25,10 +25,10 @@ def encrypt_and_setup():
 
     options = cli_options()
 
-    fastluks.main_script(options.device_name, options.cryptdev, options.mountpoint, options.filesystem,
-                        options.cipher_algorithm, options.keysize, options.hash_algorithm,
-                        options.luks_header_backup_dir, options.luks_header_backup_file, options.luks_cryptdev_file,
-                        options.passphrase_length, options.passphrase, options.passphrase_confirmation)
+    main_script(options.device_name, options.cryptdev, options.mountpoint, options.filesystem,
+                options.cipher_algorithm, options.keysize, options.hash_algorithm,
+                options.luks_header_backup_dir, options.luks_header_backup_file, options.luks_cryptdev_file,
+                options.passphrase_length, options.passphrase, options.passphrase_confirmation)
 
 #______________________________________
 if __name__ == '__main__':
