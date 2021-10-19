@@ -505,7 +505,7 @@ class device:
 
     def encrypt(self, cipher_algorithm, keysize, hash_algorithm, luks_header_backup_dir, luks_header_backup_file, 
                LOCKFILE, SUCCESS_FILE, luks_cryptdev_file, # vault_url, wrapping_token, secret_path, user_key,
-               passphrase_length, passphrase, passphrase_confirmation):
+               passphrase_length, passphrase, passphrase_confirmation, save_passphrase_locally):
         
         locked = lock(LOCKFILE) # Create lock file
 
@@ -522,8 +522,9 @@ class device:
                                         passphrase_length, passphrase, passphrase_confirmation)
             unlock_if_false(s3cret, locked, LOCKFILE)
 
-            with open('./s3cret_file','w') as sf: # TODO: !!!!!! REMOVE THIS AFTER TROUBLESHOOTING !!!!!!
-                sf.write(s3cret)
+            if save_passphrase_locally != None:
+                with open(f'{save_passphrase_locally}/fastluks.key','w') as sf:
+                    sf.write(s3cret)
         
         unlock_if_false(self.open_device(s3cret), locked, LOCKFILE) # Create mapping
 
@@ -555,7 +556,7 @@ class device:
 def main_script(device_name='/dev/vdb', cryptdev='crypt', mountpoint='/export', filesystem='ext4',
                 cipher_algorithm='aes-xts-plain64', keysize=256, hash_algorithm='sha256', luks_header_backup_dir='/etc/luks',
                 luks_header_backup_file='luks-header.bck', luks_cryptdev_file='/etc/luks/luks-cryptdev.ini',
-                passphrase_length=8, passphrase=None, passphrase_confirmation=None):
+                passphrase_length=8, passphrase=None, passphrase_confirmation=None, save_passphrase_locally=None):
     
     device_to_encrypt = device(device_name, cryptdev, mountpoint, filesystem)
     
@@ -563,7 +564,8 @@ def main_script(device_name='/dev/vdb', cryptdev='crypt', mountpoint='/export', 
     SUCCESS_FILE = '/var/run/fast-luks-encryption.success'
     
     device_to_encrypt.encrypt(cipher_algorithm, keysize, hash_algorithm, luks_header_backup_dir, luks_header_backup_file, 
-                              LOCKFILE, SUCCESS_FILE, luks_cryptdev_file, passphrase_length, passphrase, passphrase_confirmation)
+                              LOCKFILE, SUCCESS_FILE, luks_cryptdev_file, passphrase_length, passphrase, passphrase_confirmation,
+                              save_passphrase_locally)
                               # vault_url, wrapping_token, secret_path, user_key
 
     variables = read_ini_file(luks_cryptdev_file)
