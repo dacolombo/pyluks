@@ -17,3 +17,8 @@ To run the main script (which performs encryption and volume setup) with the def
 import fastluks
 fastluks.main_script()
 ```
+
+The same result can be obtained directly from the command line after preparing and activating the virtual environment with the following command:
+```bash
+fastluks_main_script.py
+```
