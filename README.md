@@ -1,12 +1,21 @@
 # fastluks
 Python scripts for storage encryption through LUKS. Converted into python from the bash scripts of [fast-luks](https://github.com/Laniakea-elixir-it/fast-luks)
 
-For this package to work properly, both the installation and usage procedure must be run as superuser.
+For this package to work properly, both the installation and usage procedure must be run as superuser either in an Ubuntu or CentOS machine.
 
 ## Installation
-To install this package in a python virtual environment, create and activate the venv, then install the package with pip:
+The procedure to setup a virtual environment and install the package on a CentOS machine is the following:
 ```bash
-python3 -m virtualenv venv
+yum install -y python3
+python3 -m venv venv
+. venv/bin/activate
+pip install fastluks
+```
+To do the same on an Ubuntu machine:
+```bash
+apt-get update
+apt-get install -y python3 python3-pip python3-venv
+python3 -m venv venv
 . venv/bin/activate
 pip install fastluks
 ```
