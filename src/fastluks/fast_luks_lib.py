@@ -525,6 +525,7 @@ class device:
             if save_passphrase_locally != None:
                 with open(f'{save_passphrase_locally}/fastluks.key','w') as sf:
                     sf.write(s3cret)
+                echo('INFO',f'Fastluks key has been saved in {save_passphrase_locally}')
         
         unlock_if_false(self.open_device(s3cret), locked, LOCKFILE) # Create mapping
 
