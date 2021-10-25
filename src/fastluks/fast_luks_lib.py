@@ -451,7 +451,8 @@ class device:
         logging.info(f'Check {self.cryptdev} status with cryptsetup status')
         run_command(f'cryptsetup -v status {self.cryptdev}', log_stderr_stdout=True)
     
-    def create_cryptdev_ini_file(self, luks_cryptdev_file, cipher_algorithm, hash_algorithm, keysize, luks_header_backup_dir, luks_header_backup_file, now=now):
+    def create_cryptdev_ini_file(self, luks_cryptdev_file, cipher_algorithm, hash_algorithm, keysize, luks_header_backup_dir, luks_header_backup_file,
+                                 save_passphrase_locally, s3cret, now=now):
         luksUUID, _, _ = run_command(f'cryptsetup luksUUID {self.device_name}')
 
         with open(luks_cryptdev_file, 'w') as f:
@@ -468,13 +469,18 @@ class device:
             f.write(f'hash_algorithm = {hash_algorithm}\n')
             f.write(f'keysize = {keysize}\n')
             f.write(f'device = {self.device_name}\n')
-            f.write(f'uuid = {luksUUID}\n')
+            f.write(f'uuid = {luksUUID}')
             f.write(f'cryptdev = {self.cryptdev}\n')
             f.write(f'mapper = /dev/mapper/{self.cryptdev}\n')
             f.write(f'mountpoint = {self.mountpoint}\n')
             f.write(f'filesystem = {self.filesystem}\n')
             f.write(f'header_path = {luks_header_backup_dir}/{luks_header_backup_file}\n')
-        
+            if save_passphrase_locally:
+                f.write(f'passphrase = {s3cret}')
+                echo('INFO', f'Device informations and key have been saved in {luks_cryptdev_file}')
+            else:
+                echo('INFO', f'Device informations have been saved in {luks_cryptdev_file}')
+
         run_command(f'dmsetup info /dev/mapper/{self.cryptdev}', log_stderr_stdout=True)
         run_command(f'cryptsetup luksDump {self.device_name}', log_stderr_stdout=True)
 
@@ -521,17 +527,13 @@ class device:
                                         # vault_url, wrapping_token, secret_path, user_key,
                                         passphrase_length, passphrase, passphrase_confirmation)
             unlock_if_false(s3cret, locked, LOCKFILE)
-
-            if save_passphrase_locally != None:
-                with open(f'{save_passphrase_locally}/fastluks.key','w') as sf:
-                    sf.write(s3cret)
-                echo('INFO',f'Fastluks key has been saved in {save_passphrase_locally}')
         
         unlock_if_false(self.open_device(s3cret), locked, LOCKFILE) # Create mapping
 
         self.encryption_status() # Check status
 
-        self.create_cryptdev_ini_file(luks_cryptdev_file, cipher_algorithm, hash_algorithm, keysize, luks_header_backup_dir, luks_header_backup_file) # Create ini file
+        self.create_cryptdev_ini_file(luks_cryptdev_file, cipher_algorithm, hash_algorithm, keysize, luks_header_backup_dir,
+                                      luks_header_backup_file, save_passphrase_locally, s3cret) # Create ini file
 
         end_encrypt_procedure(SUCCESS_FILE) # LUKS encryption finished. Print end dialogue.
 
@@ -546,8 +548,8 @@ class device:
 
         self.mount_vol() # Mount volume
 
-        self.create_cryptdev_ini_file(now, cipher_algorithm, hash_algorithm, keysize, luksUUID,
-                                      luks_header_backup_dir, luks_header_backup_file) # Update ini file
+        #self.create_cryptdev_ini_file(luks_cryptdev_file, cipher_algorithm, hash_algorithm, keysize, luks_header_backup_dir,
+        #                              luks_header_backup_file, save_passphrase_locally, s3cret) # Update ini file
         
         end_volume_setup_procedure(SUCCESS_FILE) # Volume setup finished. Print end dialogue
 

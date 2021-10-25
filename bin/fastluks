@@ -18,7 +18,7 @@ def cli_options():
     parser.add_argument('-l', '--passphrase-length', default=8, type=int, dest='passphrase_length', help='Passphrase length')
     parser.add_argument('-p', '--passphrase', default=None, dest='passphrase', help='Passphrase')
     parser.add_argument('--passphrase_confirmation', default=None, dest='passphrase_confirmation', help='Passphrase confirmation')
-    parser.add_argument('--save-passphrase-locally', default='/opt', dest='save_passphrase_locally', help='Path where passphrase is stored')
+    parser.add_argument('--save-passphrase-locally', default=True, type=bool, dest='save_passphrase_locally', help='Path where passphrase is stored')
     return parser.parse_args()
 
 #______________________________________
