@@ -1,8 +1,8 @@
 # import dependencies
+from .common import run_command # import run_command function from common.py file
 import logging
 import random
 from string import ascii_letters, digits, ascii_lowercase
-import subprocess
 import os
 from pathlib import Path
 from datetime import datetime
@@ -85,25 +85,6 @@ def echo(loglevel, text):
 logging.basicConfig(filename=LOGFILE, filemode='a+', level=0, format='%(levelname)s %(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
 
-#________________________________
-# Function to run bash commands
-def run_command(cmd, log_stderr_stdout = False):
-    """
-    Run subprocess call redirecting stdout, stderr and the command exit code.
-    """
-    proc = subprocess.Popen(args=cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    communicateRes = proc.communicate()
-    stdout, stderr = [x.decode('utf-8') for x in communicateRes]
-    status = proc.wait()
-
-    # Functionality to replicate cmd >> "$LOGFILE" 2>&1
-    if log_stderr_stdout:
-        with open(LOGFILE, 'a') as log:
-            log.write(f'{stdout}\n{stderr}')
-
-    return stdout, stderr, status
-
-
 #____________________________________
 # Lock/UnLock Section
 def lock(LOCKFILE):
@@ -162,13 +143,13 @@ def info(device, cipher_algorithm, hash_algorithm, keysize, cryptdev, mountpoint
 
 #____________________________________
 # Install cryptsetup
-def install_cryptsetup(log_stderr_stdout=False):
+def install_cryptsetup(LOGFILE=None):
     if DISTNAME == 'ubuntu':
         echo('INFO', 'Distribution: Ubuntu. Using apt.')
-        run_command('apt-get install -y cryptsetup pv', log_stderr_stdout)
+        run_command('apt-get install -y cryptsetup pv', LOGFILE)
     else:
         echo('INFO', 'Distribution: CentOS. Using yum.')
-        run_command('yum install -y cryptsetup-luks pv', log_stderr_stdout)
+        run_command('yum install -y cryptsetup-luks pv', LOGFILE)
 
 
 #____________________________________
@@ -187,7 +168,7 @@ def check_cryptsetup():
     _, _, cryptsetup_status = run_command('type -P cryptsetup &>/dev/null')
     if cryptsetup_status != 0:
         echo('INFO', 'cryptsetup is not installed. Installing...')
-        install_cryptsetup(log_stderr_stdout=True)
+        install_cryptsetup(LOGFILE=LOGFILE)
         echo('INFO', 'cryptsetup installed.')
 
 
@@ -364,7 +345,7 @@ class device:
             else:
                 logging.error('Device not mounted, exiting! Please check logfile:')
                 logging.error(f'No device mounted to {self.mountpoint}')
-                run_command('df -h', log_stderr_stdout=True)
+                run_command('df -h', LOGFILE=LOGFILE)
                 return False # TODO: unlock and terminate process
     
     def is_encrypted(self):
@@ -378,7 +359,7 @@ class device:
 
     def umount_vol(self):
         logging.info('Umounting device.')
-        run_command(f'umount {self.mountpoint}', log_stderr_stdout=True)
+        run_command(f'umount {self.mountpoint}', LOGFILE=LOGFILE)
         logging.info(f'{self.device_name} umounted, ready for encryption!')
 
     def luksFormat(self, s3cret, cipher_algorithm, keysize, hash_algorithm):
@@ -444,12 +425,12 @@ class device:
                     logging.error('Unable to luksOpen device.')
                     logging.error(f'/dev/mapper/{self.cryptdev} already exists.')
                     logging.error(f'Mounting {self.device_name} to {self.mountpoint} again.')
-                    run_command(f'mount {self.device_name} {self.mountpoint}', log_stderr_stdout=True)
+                    run_command(f'mount {self.device_name} {self.mountpoint}', LOGFILE=LOGFILE)
                     return False # TODO: unlock and exit
     
     def encryption_status(self):
         logging.info(f'Check {self.cryptdev} status with cryptsetup status')
-        run_command(f'cryptsetup -v status {self.cryptdev}', log_stderr_stdout=True)
+        run_command(f'cryptsetup -v status {self.cryptdev}', LOGFILE=LOGFILE)
     
     def create_cryptdev_ini_file(self, luks_cryptdev_file, cipher_algorithm, hash_algorithm, keysize, luks_header_backup_dir, luks_header_backup_file,
                                  save_passphrase_locally, s3cret, now=now):
@@ -481,8 +462,8 @@ class device:
             else:
                 echo('INFO', f'Device informations have been saved in {luks_cryptdev_file}')
 
-        run_command(f'dmsetup info /dev/mapper/{self.cryptdev}', log_stderr_stdout=True)
-        run_command(f'cryptsetup luksDump {self.device_name}', log_stderr_stdout=True)
+        run_command(f'dmsetup info /dev/mapper/{self.cryptdev}', LOGFILE=LOGFILE)
+        run_command(f'cryptsetup luksDump {self.device_name}', LOGFILE=LOGFILE)
 
     def wipe_data(self):
         echo('INFO', 'Paranoid mode selected. Wiping disk')
@@ -497,7 +478,7 @@ class device:
     def create_fs(self):
         echo('INFO', 'Creating filesystem.')
         logging.info(f'Creating {self.filesystem} filesystem on /dev/mapper/{self.cryptdev}')
-        _, _, mkfs_ec = run_command(f'mkfs -t {self.filesystem} /dev/mapper/{self.cryptdev}', log_stderr_stdout=True)
+        _, _, mkfs_ec = run_command(f'mkfs -t {self.filesystem} /dev/mapper/{self.cryptdev}', LOGFILE=LOGFILE)
         if mkfs_ec != 0:
             echo('ERROR', f'While creating {self.filesystem} filesystem. Please check logs.')
             echo('ERROR', 'Command mkfs failed!')
@@ -506,8 +487,8 @@ class device:
     def mount_vol(self):
         echo('INFO', 'Mounting encrypted device.')
         logging.info(f'Mounting /dev/mapper/{self.cryptdev} to {self.mountpoint}')
-        run_command(f'mount /dev/mapper/{self.cryptdev} {self.mountpoint}', log_stderr_stdout=True)
-        run_command('df -Hv', log_stderr_stdout=True)
+        run_command(f'mount /dev/mapper/{self.cryptdev} {self.mountpoint}', LOGFILE=LOGFILE)
+        run_command('df -Hv', LOGFILE=LOGFILE)
 
     def encrypt(self, cipher_algorithm, keysize, hash_algorithm, luks_header_backup_dir, luks_header_backup_file, 
                LOCKFILE, SUCCESS_FILE, luks_cryptdev_file, # vault_url, wrapping_token, secret_path, user_key,
