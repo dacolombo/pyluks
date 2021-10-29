@@ -542,6 +542,9 @@ def main_script(device_name='/dev/vdb', cryptdev='crypt', mountpoint='/export', 
                 luks_header_backup_file='luks-header.bck', luks_cryptdev_file='/etc/luks/luks-cryptdev.ini',
                 passphrase_length=8, passphrase=None, passphrase_confirmation=None, save_passphrase_locally=None):
     
+    if not os.geteuid() == 0:
+        sys.exit('Error: Script must be run as root.')
+
     device_to_encrypt = device(device_name, cryptdev, mountpoint, filesystem)
     
     LOCKFILE = '/var/run/fast-luks-encryption.lock'
