@@ -1,5 +1,5 @@
 #! /usr/bin/env python3
-from fastluks import main_script
+from fastluks import __version__, main_script
 import argparse
 
 #______________________________________
@@ -18,7 +18,8 @@ def cli_options():
     parser.add_argument('-l', '--passphrase-length', default=8, type=int, dest='passphrase_length', help='Passphrase length')
     parser.add_argument('-p', '--passphrase', default=None, dest='passphrase', help='Passphrase')
     parser.add_argument('--passphrase_confirmation', default=None, dest='passphrase_confirmation', help='Passphrase confirmation')
-    parser.add_argument('--save-passphrase-locally', default=True, type=bool, dest='save_passphrase_locally', help='Path where passphrase is stored')
+    parser.add_argument('--save-passphrase-locally', default=True, type=bool, dest='save_passphrase_locally', help='Store passphrase in local ini file')
+    parser.add_argument('-V', '--version', action='store_true', dest='version', default=False, help='Print fastluks version')
     return parser.parse_args()
 
 #______________________________________
@@ -26,11 +27,14 @@ def encrypt_and_setup():
 
     options = cli_options()
 
-    main_script(options.device_name, options.cryptdev, options.mountpoint, options.filesystem,
-                options.cipher_algorithm, options.keysize, options.hash_algorithm,
-                options.luks_header_backup_dir, options.luks_header_backup_file, options.luks_cryptdev_file,
-                options.passphrase_length, options.passphrase, options.passphrase_confirmation,
-                options.save_passphrase_locally)
+    if options.version is True:
+        print('fastluks package: ' + __version__)
+    else:
+        main_script(options.device_name, options.cryptdev, options.mountpoint, options.filesystem,
+                    options.cipher_algorithm, options.keysize, options.hash_algorithm,
+                    options.luks_header_backup_dir, options.luks_header_backup_file, options.luks_cryptdev_file,
+                    options.passphrase_length, options.passphrase, options.passphrase_confirmation,
+                    options.save_passphrase_locally)
 
 #______________________________________
 if __name__ == '__main__':
