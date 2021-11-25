@@ -1,19 +1,19 @@
-# import dependencies
-from .common import run_command # import run_command function from common.py file
+# Import dependencies
 import logging
 import random
 from string import ascii_letters, digits, ascii_lowercase
 import os
+import sys
 from pathlib import Path
 from datetime import datetime
 import re
 import zc.lockfile
 from configparser import ConfigParser
-import requests
-# https://stackoverflow.com/questions/27981545/suppress-insecurerequestwarning-unverified-https-request-is-being-made-in-pytho
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-import json
+
+# Import internal dependencies
+from .common import run_command
+from .vault_support import write_secret_to_vault
+
 
 ################################################################################
 # VARIABLES
@@ -99,28 +99,28 @@ def lock(LOCKFILE):
             pid_hostname = lock_file.readline()
             PID = re.search(r'^\s(\d+);', pid_hostname).group()
         echo('ERROR', f'Another script instance is active: PID {PID}')
-        exit(2)
+        sys.exit(2)
 
     # lock is valid and OTHERPID is active - exit, we're locked!
     echo('ERROR', f'Lock failed, PID {PID} is active')
-    echo('ERROR', f'Another {STAT} process is active')
-    echo('ERROR', f'If you are sure {STAT} is not already running,')
-    echo('ERROR', f'You can remove {LOCKFILE} and restart {STAT}')
-    exit(2)
+    echo('ERROR', f'Another fastluks process is active')
+    echo('ERROR', f'If you are sure fastluks is not already running,')
+    echo('ERROR', f'You can remove {LOCKFILE} and restart fastluks')
+    sys.exit(2)
 
 
 #____________________________________
-def unlock(lock, LOCKFILE, do_exit=True):
+def unlock(lock, LOCKFILE, do_exit=True, message=None):
     lock.close()
     os.remove(LOCKFILE)
     if do_exit:
-        exit()
+        sys.exit(f'UNLOCK: {message}')
 
 
 #____________________________________
-def unlock_if_false(function_return, lock, LOCKFILE):
+def unlock_if_false(function_return, lock, LOCKFILE, message=None):
     if function_return == False:
-        unlock(lock, LOCKFILE)
+        unlock(lock, LOCKFILE, message=message)
 
 
 #____________________________________
@@ -227,79 +227,6 @@ def read_ini_file(cryptdev_ini_file):
 
 
 #____________________________________
-def unwrap_vault_token(url, wrapping_token):
-    url = url + '/v1/sys/wrapping/unwrap'
-    headers = { "X-Vault-Token": wrapping_token }
-
-    response = requests.post(url, headers=headers, verify=False)
-    response.raise_for_status()
-    deserialized_response = json.loads(response.text)
-
-    try:
-        deserialized_response["auth"]["client_token"]
-    except KeyError:
-        raise Exception("[FATAL] Unable to unwrap vault token.")
-
-    return deserialized_response["auth"]["client_token"]
-
-
-#____________________________________
-def post_secret(url, path, token, key, value):
-    url = url + '/v1/secrets/data/' + path
-    headers = { "X-Vault-Token": token }
-    data = '{ "options": { "cas": 0 }, "data": { "'+key+'": "'+value+'"} }'
-
-    response = requests.post(url, headers=headers, data=data, verify=False)
-    response.raise_for_status()
-    deserialized_response = json.loads(response.text)
-
-    try:
-        deserialized_response["data"]
-    except KeyError:
-        raise Exception("[FATAL] Unable to write vault path.")
-
-    return deserialized_response
-
-
-#____________________________________
-def parse_response(response):
-    if not response["data"]["created_time"]:
-        raise Exception("No cretation time")
-
-    if response["data"]["destroyed"] != False:
-        raise Exception("Token already detroyed")
-
-    if response["data"]["version"] != 1:
-        raise Exception("Token not at 1st verion")
-
-    if response["data"]["deletion_time"] != "":
-        raise Exception("Token aready deleted")
-
-    return 0
-
-
-#______________________________________
-def revoke_token(url, token):
-    url = url + '/v1/auth/token/revoke-self'
-    headers = { "X-Vault-Token": token }
-    response = requests.post( url, headers=headers, verify=False )
-
-
-#____________________________________
-def write_secret_to_vault(vault_url, wrapping_token, secret_path, user_key, user_value):
-    # Check vault
-    r = requests.get(vault_url)
-    r.raise_for_status()
-
-    write_token = unwrap_vault_token(vault_url, wrapping_token)
-    response_output = post_secret(vault_url, secret_path, write_token, user_key, user_value)
-    parse_response(response_output)
-
-    revoke_token(vault_url, write_token)
-
-
-#____________________________________
-# Used in setup_device
 def check_passphrase(passphrase_length, passphrase, passphrase_confirmation):
     if passphrase_length == None:
         if passphrase == None:
@@ -318,6 +245,9 @@ def check_passphrase(passphrase_length, passphrase, passphrase_confirmation):
             return s3cret
 
 
+################################################################################
+# CLASSES
+
 #____________________________________
 class device:
     
@@ -330,11 +260,13 @@ class device:
     def check_vol(self):
         logging.debug('Checking storage volume.')
 
+        # Check if a volume is already mounted to mountpoint
         if os.path.ismount(self.mountpoint):
             mounted_device, _, _ = run_command(f'df -P {self.mountpoint} | tail -1 | cut -d" " -f 1')
             logging.debug(f'Device name: {mounted_device}')
 
         else:
+            # Check if device_name is a volume
             if Path(self.device_name).is_block_device():
                 logging.debug(f'External volume on {self.device_name}. Using it for encryption.')
                 if not os.path.isdir(self.mountpoint):
@@ -346,7 +278,7 @@ class device:
                 logging.error('Device not mounted, exiting! Please check logfile:')
                 logging.error(f'No device mounted to {self.mountpoint}')
                 run_command('df -h', LOGFILE=LOGFILE)
-                return False # TODO: unlock and terminate process
+                return False # unlock and terminate process
     
     def is_encrypted(self):
         logging.debug('Checking if the volume is already encrypted.')
@@ -372,8 +304,7 @@ class device:
         return run_command(f'printf "{s3cret}\n" | cryptsetup luksOpen {self.device_name} {self.cryptdev}')
 
     def setup_device(self, luks_header_backup_dir, luks_header_backup_file, cipher_algorithm, keysize, hash_algorithm,
-                    # vault_url, wrapping_token, secret_path, user_key
-                    passphrase_length, passphrase, passphrase_confirmation):
+                    passphrase_length, passphrase, passphrase_confirmation, use_vault, vault_url, wrapping_token, secret_path, user_key):
             echo('INFO', 'Start the encryption procedure.')
             logging.info(f'Using {cipher_algorithm} algorithm to luksformat the volume.')
             logging.debug('Start cryptsetup')
@@ -383,13 +314,15 @@ class device:
 
             s3cret = check_passphrase(passphrase_length, passphrase, passphrase_confirmation)
             if s3cret == False:
-                return False # TODO: unlock and exit
+                return False # unlock and exit
             
             # Start encryption procedure
             self.luksFormat(s3cret, cipher_algorithm, keysize, hash_algorithm)
 
             # Write the secret to vault
-            # write_secret_to_vault(vault_url, wrapping_token, secret_path, user_key, s3cret)
+            if use_vault:
+                write_secret_to_vault(vault_url, wrapping_token, secret_path, user_key, s3cret)
+                echo('INFO','Passphrase stored in Vault')
 
             # Backup LUKS header
             if not os.path.isdir(luks_header_backup_dir):
@@ -407,7 +340,7 @@ class device:
                 logging.error(f'Command cryptsetup failed with exit code {luksHeaderBackup_ec}! Mounting {self.device_name} to {self.mountpoint} and exiting.')
                 if luksHeaderBackup_ec == 2:
                     echo('ERROR', 'Bad passphrase. Please try again.')
-                return False # TODO: unlock and exit
+                return False # unlock and exit
 
             return s3cret
     
@@ -419,14 +352,14 @@ class device:
             if openec != 0:
                 if openec == 2:
                     echo('ERROR', 'Bad passphrase. Please try again.')
-                    return False # TODO: unlock and exit
+                    return False # unlock and exit
                 else:
                     echo('ERROR', f'Crypt device already exists! Please check logs: {LOGFILE}')
                     logging.error('Unable to luksOpen device.')
                     logging.error(f'/dev/mapper/{self.cryptdev} already exists.')
                     logging.error(f'Mounting {self.device_name} to {self.mountpoint} again.')
                     run_command(f'mount {self.device_name} {self.mountpoint}', LOGFILE=LOGFILE)
-                    return False # TODO: unlock and exit
+                    return False # unlock and exit
     
     def encryption_status(self):
         logging.info(f'Check {self.cryptdev} status with cryptsetup status')
@@ -482,7 +415,7 @@ class device:
         if mkfs_ec != 0:
             echo('ERROR', f'While creating {self.filesystem} filesystem. Please check logs.')
             echo('ERROR', 'Command mkfs failed!')
-            return False #TODO: unlock and exit
+            return False # unlock and exit
     
     def mount_vol(self):
         echo('INFO', 'Mounting encrypted device.')
@@ -491,8 +424,8 @@ class device:
         run_command('df -Hv', LOGFILE=LOGFILE)
 
     def encrypt(self, cipher_algorithm, keysize, hash_algorithm, luks_header_backup_dir, luks_header_backup_file, 
-               LOCKFILE, SUCCESS_FILE, luks_cryptdev_file, # vault_url, wrapping_token, secret_path, user_key,
-               passphrase_length, passphrase, passphrase_confirmation, save_passphrase_locally):
+               LOCKFILE, SUCCESS_FILE, luks_cryptdev_file, passphrase_length, passphrase, passphrase_confirmation,
+               save_passphrase_locally, use_vault, vault_url, wrapping_token, secret_path, user_key):
         
         locked = lock(LOCKFILE) # Create lock file
 
@@ -500,16 +433,16 @@ class device:
 
         check_cryptsetup() # Check that cryptsetup and dmsetup are installed
 
-        unlock_if_false(self.check_vol(), locked, LOCKFILE) # Check which virtual volume is mounted to mountpoint, unlock and exit if it's not mounted
+        unlock_if_false(self.check_vol(), locked, LOCKFILE, message='Volume checks not satisfied') # Check which virtual volume is mounted to mountpoint, unlock and exit if it's not mounted
 
         if not self.is_encrypted(): # Check if the volume is encrypted, if it's not start the encryption procedure
             self.umount_vol()
             s3cret = self.setup_device(luks_header_backup_dir, luks_header_backup_file, cipher_algorithm, keysize, hash_algorithm,
-                                        # vault_url, wrapping_token, secret_path, user_key,
-                                        passphrase_length, passphrase, passphrase_confirmation)
-            unlock_if_false(s3cret, locked, LOCKFILE)
+                                       passphrase_length, passphrase, passphrase_confirmation, use_vault, vault_url, wrapping_token,
+                                       secret_path, user_key)
+            unlock_if_false(s3cret, locked, LOCKFILE, message='Device setup procedure failed.')
         
-        unlock_if_false(self.open_device(s3cret), locked, LOCKFILE) # Create mapping
+        unlock_if_false(self.open_device(s3cret), locked, LOCKFILE, message='luksOpen failed, mapping not created.') # Create mapping
 
         self.encryption_status() # Check status
 
@@ -525,22 +458,23 @@ class device:
         
         locked = lock(LOCKFILE) # Create lock file
 
-        unlock_if_false(self.create_fs(), locked, LOCKFILE) # Create filesystem
+        unlock_if_false(self.create_fs(), locked, LOCKFILE, message='Command mkfs failed.') # Create filesystem
 
         self.mount_vol() # Mount volume
-
-        #self.create_cryptdev_ini_file(luks_cryptdev_file, cipher_algorithm, hash_algorithm, keysize, luks_header_backup_dir,
-        #                              luks_header_backup_file, save_passphrase_locally, s3cret) # Update ini file
         
         end_volume_setup_procedure(SUCCESS_FILE) # Volume setup finished. Print end dialogue
 
         unlock(locked, LOCKFILE, do_exit=False) # Unlock once done
 
 
+################################################################################
+# MAIN SCRIPT FUNCTION
+
 def main_script(device_name='/dev/vdb', cryptdev='crypt', mountpoint='/export', filesystem='ext4',
                 cipher_algorithm='aes-xts-plain64', keysize=256, hash_algorithm='sha256', luks_header_backup_dir='/etc/luks',
                 luks_header_backup_file='luks-header.bck', luks_cryptdev_file='/etc/luks/luks-cryptdev.ini',
-                passphrase_length=8, passphrase=None, passphrase_confirmation=None, save_passphrase_locally=None):
+                passphrase_length=8, passphrase=None, passphrase_confirmation=None, save_passphrase_locally=None,
+                use_vault=False, vault_url=None, wrapping_token=None, secret_path=None, user_key=None):
     
     if not os.geteuid() == 0:
         sys.exit('Error: Script must be run as root.')
@@ -552,11 +486,10 @@ def main_script(device_name='/dev/vdb', cryptdev='crypt', mountpoint='/export', 
     
     device_to_encrypt.encrypt(cipher_algorithm, keysize, hash_algorithm, luks_header_backup_dir, luks_header_backup_file, 
                               LOCKFILE, SUCCESS_FILE, luks_cryptdev_file, passphrase_length, passphrase, passphrase_confirmation,
-                              save_passphrase_locally)
-                              # vault_url, wrapping_token, secret_path, user_key
+                              save_passphrase_locally, use_vault, vault_url, wrapping_token, secret_path, user_key)
 
-    variables = read_ini_file(luks_cryptdev_file)
-    luksUUID = variables['uuid']
+    cryptdev_variables = read_ini_file(luks_cryptdev_file)
+    luksUUID = cryptdev_variables['uuid']
     LOCKFILE = '/var/run/fast-luks-volume-setup.lock'
     SUCCESS_FILE = '/var/run/fast-luks-volume-setup.success'
 

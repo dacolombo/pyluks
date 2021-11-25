@@ -21,16 +21,22 @@ pip install fastluks
 ```
 
 ## Usage: fastluks
-To run the main script (which performs encryption and volume setup) with the default parameters, import the package and call the main_script function inside of a python session in the venv:
-```python
-import fastluks
-fastluks.main_script()
-```
-
-The same result can be obtained directly from the command line after preparing and activating the virtual environment with the following command:
+To perform encryption and volume setup with default parameters, the `fastluks` command can be used inside the virtual environment:
 ```bash
 fastluks
 ```
+The encryption passphrase can be stored locally and/or on Hashicorp Vault.
+- To store the passphrase locally:
+```bash
+fastluks --save-passphrase-locally
+```
+- To store the passphrase on Vault, the flag `--vault` must be used with the required arguments specified:
+<pre>
+fastluks --vault --vault-url <i>url</i> --wrapping-token <i>token</i> --secret-path <i>path</i> --user-key <i>key</i>
+</pre>
+
+
+
 
 ## Usage: luksctl
 In order to manage a volume encrypted with fastluks, the command `luksctl` can be used from the command line:
