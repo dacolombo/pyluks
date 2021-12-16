@@ -1,0 +1,54 @@
+#! /usr/bin/env python3
+
+# Import dependencies
+from fastluks import __version__
+from luksctl_api.luksctl_run import *
+import argparse
+
+#______________________________________
+def cli_options():
+    parser = argparse.ArgumentParser(description='LUKS storage management script API')
+    parser.add_argument('-V', '--version', action='store_true', dest='version', default=False, help='Print luksctl_api version')
+    subparsers = parser.add_subparsers(help='Type of node')
+
+    master_parser = subparsers.add_parser('master')
+    master_parser.add_argument('--infrastructure-config', choices=['single_vm','cluster'], dest='infra_config', help='Infrastructure configuration')
+    master_parser.add_argument('--virtualization-type', default=None, dest='virtualization_type', help='Virtualization type')
+    master_parser.add_argument('--node-list', nargs='*', dest='node_list', default=None, help='Worker nodes IPs')
+    master_parser.set_defaults(setup_function=master_setup)
+
+    wn_parser = subparsers.add_parser('wn')
+    wn_parser.add_argument('--nfs-mountpoint-list', nargs='*', dest='nfs_mountpoint_list', help='NFS mountpoint list')
+    wn_parser.set_defaults(setup_function=wn_setup)
+
+    return parser.parse_args()
+
+
+#______________________________________
+def master_setup(options):
+    
+    master_node = master(options.infra_config, options.virtualization_type, options.node_list)
+
+    master_node.write_api_config()
+
+    master_node.write_systemd_unit_file()
+
+
+#______________________________________
+def wn_setup(options):
+
+    wn_node = wn(options.nfs_mountpoint_list)
+
+    wn_node.write_api_config()
+
+    wn_node.write_systemd_unit_file()
+
+
+#______________________________________
+if __name__ == "__main__":
+    options = cli_options()
+
+    if options.version:
+        print('fastluks package: ' + __version__)
+
+    options.setup_function(options)
