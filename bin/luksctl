@@ -24,9 +24,6 @@ def cli_options():
 #______________________________________
 def luksctl():
 
-    if not os.geteuid() == 0:
-        sys.exit('[Error] Script must be run as root.')
-
     options = cli_options()
 
     if options.version is True:

@@ -1,6 +1,6 @@
 certifi==2021.5.30
 charset-normalizer==2.0.6
-fastluks==0.0.27
+fastluks==0.0.28
 idna==3.2
 zc.lockfile==2.0
 hvac==0.11.2
