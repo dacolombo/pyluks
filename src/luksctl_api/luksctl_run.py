@@ -57,7 +57,7 @@ class master:
             config.write(f)
 
 
-    def write_systemd_unit_file(self, service_file='/etc/systemd/system/luksctl-api.service', ssl=False):
+    def write_systemd_unit_file(self, fastluks_venv, service_file='/etc/systemd/system/luksctl-api.service', ssl=False):
         
         # Exit if command is not run as root
         if not os.geteuid() == 0:
@@ -73,12 +73,12 @@ class master:
         config.add_section('Service')
         config['Service']['User'] = 'luksctl_api'
         config['Service']['Group'] = 'luksctl_api'
-        config['Service']['Working_directory'] = '/home/luksctl_api/luksctl_api'
-        config['Service']['Environment'] = '"PATH=/home/luksctl_api/luksctl_api/venv/bin"'
+        config['Service']['Working_directory'] = fastluks_venv
+        config['Service']['Environment'] = f'"PATH={fastluks_venv}/bin"'
         if ssl:
-            config['Service']['ExecStart'] = '/home/luksctl_api/luksctl_api/venv/bin/gunicorn --workers 2 --bind 0.0.0.0:5000 -m 007 --certfile=/etc/luks/cert.pem --keyfile=/etc/luks/key.pem app:master_app'
+            config['Service']['ExecStart'] = f'{fastluks_venv}/bin/gunicorn --workers 2 --bind 0.0.0.0:5000 -m 007 --certfile=/etc/luks/cert.pem --keyfile=/etc/luks/key.pem app:master_app'
         else:
-            config['Service']['ExecStart'] = '/home/luksctl_api/luksctl_api/venv/bin/gunicorn --workers 2 --bind 0.0.0.0:5000 -m 007 app:master_app'
+            config['Service']['ExecStart'] = f'{fastluks_venv}/bin/gunicorn --workers 2 --bind 0.0.0.0:5000 -m 007 app:master_app'
         
         config.add_section('Install')
         config['Install']['WantedBy'] = 'multi-user.target'
@@ -204,7 +204,7 @@ class wn:
             config.write(f)
 
 
-    def write_systemd_unit_file(self, service_file='/etc/systemd/system/luksctl-api.service', ssl=False):
+    def write_systemd_unit_file(self, fastluks_venv, service_file='/etc/systemd/system/luksctl-api.service', ssl=False):
         
         # Exit if command is not run as root
         if not os.geteuid() == 0:
@@ -220,9 +220,9 @@ class wn:
         config.add_section('Service')
         config['Service']['User'] = 'luksctl_api_wn'
         config['Service']['Group'] = 'luksctl_api_wn'
-        config['Service']['Working_directory'] = '/opt/luksctl_api/wn'
-        config['Service']['Environment'] = '"PATH=/opt/luksctl_api/wn/venv/bin"'
-        config['Service']['ExecStart'] = '/opt/luksctl_api/wn/venv/bin/gunicorn --workers 2 --bind 0.0.0.0:5000 -m 007 app:wn_app'
+        config['Service']['Working_directory'] = fastluks_venv
+        config['Service']['Environment'] = f'"PATH={fastluks_venv}/bin"'
+        config['Service']['ExecStart'] = f'{fastluks_venv}/bin/gunicorn --workers 2 --bind 0.0.0.0:5000 -m 007 app:wn_app'
         
         config.add_section('Install')
         config['Install']['WantedBy'] = 'multi-user.target'
