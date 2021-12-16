@@ -1,24 +1,24 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 
 # Import dependencies
 import sys, os
 import argparse
-import subprocess
 from configparser import ConfigParser
-from fastluks import __version__, LUKSCtl
+from fastluks import __version__
+from luksctl import LUKSCtl
 
 #______________________________________
 # read /etc/luks/luks-cryptdev.ini configuration file
 luks_config_file = '/etc/luks/luks-cryptdev.ini'
 
-# Init luksct management object
+# Init luksctl management object
 luks = LUKSCtl(luks_config_file)
 
 #______________________________________
 def cli_options():
     parser = argparse.ArgumentParser(description='LUKS storage management script')
     parser.add_argument('action', choices=['open','close','status'], nargs='?', help='Action')
-    parser.add_argument('-V', '--version', action='store_true', dest='version', default=False, help='Print galaxyctl_libs version')
+    parser.add_argument('-V', '--version', action='store_true', dest='version', default=False, help='Print luksctl version')
     return parser.parse_args()
 
 #______________________________________

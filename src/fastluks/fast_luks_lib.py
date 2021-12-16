@@ -378,21 +378,26 @@ class device:
             f.write('# as long as the LUKS header remains intact.\n')
             f.write(f'# LUKS header information for {self.device_name}\n')
             f.write(f'# luks-{now}\n')
-            f.write(f'[luks]\n')
-            f.write(f'cipher_algorithm = {cipher_algorithm}\n')
-            f.write(f'hash_algorithm = {hash_algorithm}\n')
-            f.write(f'keysize = {keysize}\n')
-            f.write(f'device = {self.device_name}\n')
-            f.write(f'uuid = {luksUUID}')
-            f.write(f'cryptdev = {self.cryptdev}\n')
-            f.write(f'mapper = /dev/mapper/{self.cryptdev}\n')
-            f.write(f'mountpoint = {self.mountpoint}\n')
-            f.write(f'filesystem = {self.filesystem}\n')
-            f.write(f'header_path = {luks_header_backup_dir}/{luks_header_backup_file}\n')
+
+            config = ConfigParser()
+            config.add_section('luks')
+            config_luks = config['luks']
+            config_luks['cipher_algorithm'] = cipher_algorithm
+            config_luks['hash_algorithm'] = hash_algorithm
+            config_luks['keysize'] = str(keysize)
+            config_luks['device'] = self.device_name
+            config_luks['uuid'] = luksUUID
+            config_luks['cryptdev'] = self.cryptdev
+            config_luks['mapper'] = f'/dev/mapper/{self.cryptdev}'
+            config_luks['mountpoint'] = self.mountpoint
+            config_luks['filesystem'] = self.filesystem
+            config_luks['header_path'] = f'{luks_header_backup_dir}/{luks_header_backup_file}'
             if save_passphrase_locally:
-                f.write(f'passphrase = {s3cret}')
+                config_luks['passphrase'] = s3cret
+                config.write(f)
                 echo('INFO', f'Device informations and key have been saved in {luks_cryptdev_file}')
             else:
+                config.write(f)
                 echo('INFO', f'Device informations have been saved in {luks_cryptdev_file}')
 
         run_command(f'dmsetup info /dev/mapper/{self.cryptdev}', LOGFILE=LOGFILE)

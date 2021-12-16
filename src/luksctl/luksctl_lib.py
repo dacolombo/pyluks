@@ -1,14 +1,10 @@
 # import dependencies
-from .common import run_command # import run_command function from common.py file
-import socket
-import errno
-import json
 import os, sys
-import signal
-import time
-import platform
 import logging
 from configparser import ConfigParser
+
+# Import internal dependencies
+from fastluks import run_command
 
 #______________________________________
 # Log config

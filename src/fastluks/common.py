@@ -17,7 +17,7 @@ def run_command(cmd, LOGFILE=None):
 
     # Functionality to replicate cmd >> "$LOGFILE" 2>&1
     if LOGFILE != None:
-        with open(LOGFILE, 'a') as log:
+        with open(LOGFILE, 'a+') as log:
             log.write(f'{stdout}\n{stderr}')
     
     return stdout, stderr, status
