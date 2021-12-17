@@ -20,7 +20,7 @@ def cli_options():
 
     wn_parser = subparsers.add_parser('wn')
     wn_parser.add_argument('--nfs-mountpoint-list', nargs='*', dest='nfs_mountpoint_list', help='NFS mountpoint list')
-    master_parser.add_argument('--fastluks-venv', default='/opt/fastluks', dest='fastluks_venv', help='fastluks virtual environment path')
+    wn_parser.add_argument('--fastluks-venv', default='/opt/fastluks', dest='fastluks_venv', help='fastluks virtual environment path')
     wn_parser.set_defaults(setup_function=wn_setup)
 
     return parser.parse_args()
