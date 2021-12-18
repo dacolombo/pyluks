@@ -38,7 +38,7 @@ else:
     raise FileNotFoundError('Cryptdev ini file missing.')
 
 
-@app.route('/luksctl_api_wn/v1.0/status', method=['GET'])
+@app.route('/luksctl_api_wn/v1.0/status', methods=['GET'])
 def get_status():
     return wn_node.get_status()
 
