@@ -8,6 +8,7 @@ import logging
 # Import internal dependencies
 from fastluks import run_command
 from .vault_support import read_secret
+from .ssl_certificate import generate_self_signed_cert
 
 # Create logging facility
 logging.basicConfig(filename='/tmp/luksctl-api.log', format='%(levelname)s %(asctime)s %(message)s', level='DEBUG')
@@ -41,23 +42,30 @@ class master:
     def write_api_config(self, luks_cryptdev_file='/etc/luks/luks-cryptdev.ini'):
 
         config = ConfigParser()
+        config.read(luks_cryptdev_file)
+        # Remove luksctl_api section if written previously
+        if 'luksctl_api' in config.sections():
+            config.remove_section('luksctl_api')
 
         config.add_section('luksctl_api')
         api_config = config['luksctl_api']
 
         api_config['INFRASTRUCTURE_CONFIGURATION'] = self.infra_config
-        
+
         if self.virtualization_type != None:
             api_config['VIRTUALIZATION_TYPE'] = self.virtualization_type
 
         if self.node_list != None:
             api_config['WN_IPS'] = self.node_list
 
-        with open(luks_cryptdev_file, 'a+') as f:
+        with open(luks_cryptdev_file, 'w') as f:
             config.write(f)
 
 
-    def write_systemd_unit_file(self, fastluks_venv, service_file='/etc/systemd/system/luksctl-api.service', ssl=False):
+    def write_systemd_unit_file(self, working_directory, environment_prefix, ssl,
+                                CN='localhost', cert_file='/etc/luks/gunicorn-cert.pem',
+                                expiration_days=3650, key_size=4096, key_file='/etc/luks/gunicorn-key.pem',
+                                service_file='/etc/systemd/system/luksctl-api.service'):
         
         # Exit if command is not run as root
         if not os.geteuid() == 0:
@@ -73,12 +81,14 @@ class master:
         config.add_section('Service')
         config['Service']['User'] = 'luksctl_api'
         config['Service']['Group'] = 'luksctl_api'
-        config['Service']['Working_directory'] = fastluks_venv
-        config['Service']['Environment'] = f'"PATH={fastluks_venv}/bin"'
+        config['Service']['WorkingDirectory'] = working_directory
+        config['Service']['Environment'] = f'"PATH={environment_prefix}/bin"'
+        
         if ssl:
-            config['Service']['ExecStart'] = f'{fastluks_venv}/bin/gunicorn --workers 2 --bind 0.0.0.0:5000 -m 007 --certfile=/etc/luks/cert.pem --keyfile=/etc/luks/key.pem app:master_app'
+            generate_self_signed_cert(CN=CN, cert_file=cert_file, expiration_days=expiration_days, key_size=key_size, key_file=key_file)
+            config['Service']['ExecStart'] = f'{environment_prefix}/bin/gunicorn --workers 2 --bind 0.0.0.0:5000 -m 007 --certfile={cert_file} --keyfile={key_file} app:master_app'
         else:
-            config['Service']['ExecStart'] = f'{fastluks_venv}/bin/gunicorn --workers 2 --bind 0.0.0.0:5000 -m 007 app:master_app'
+            config['Service']['ExecStart'] = f'{environment_prefix}/bin/gunicorn --workers 2 --bind 0.0.0.0:5000 -m 007 app:master_app'
         
         config.add_section('Install')
         config['Install']['WantedBy'] = 'multi-user.target'
@@ -194,17 +204,21 @@ class wn:
     def write_api_config(self, luks_cryptdev_file='/etc/luks/luks-cryptdev.ini'):
 
         config = ConfigParser()
+        config.read(luks_cryptdev_file)
+        # Remove luksctl_api section if written previously
+        if 'luksctl_api' in config.sections():
+            config.remove_section('luksctl_api')
 
         config.add_section('luksctl_api')
         api_config = config['luksctl_api']
 
         api_config['NFS_MOUNTPOINT_LIST'] = json.dumps(self.nfs_mountpoint_list)
 
-        with open(luks_cryptdev_file, 'a+') as f:
+        with open(luks_cryptdev_file, 'w') as f:
             config.write(f)
 
 
-    def write_systemd_unit_file(self, fastluks_venv, service_file='/etc/systemd/system/luksctl-api.service', ssl=False):
+    def write_systemd_unit_file(self, working_directory, environment_prefix, service_file='/etc/systemd/system/luksctl-api.service'):
         
         # Exit if command is not run as root
         if not os.geteuid() == 0:
@@ -220,9 +234,9 @@ class wn:
         config.add_section('Service')
         config['Service']['User'] = 'luksctl_api_wn'
         config['Service']['Group'] = 'luksctl_api_wn'
-        config['Service']['Working_directory'] = fastluks_venv
-        config['Service']['Environment'] = f'"PATH={fastluks_venv}/bin"'
-        config['Service']['ExecStart'] = f'{fastluks_venv}/bin/gunicorn --workers 2 --bind 0.0.0.0:5000 -m 007 app:wn_app'
+        config['Service']['WorkingDirectory'] = working_directory
+        config['Service']['Environment'] = f'"PATH={environment_prefix}/bin"'
+        config['Service']['ExecStart'] = f'{environment_prefix}/bin/gunicorn --workers 2 --bind 0.0.0.0:5000 -m 007 app:wn_app'
         
         config.add_section('Install')
         config['Install']['WantedBy'] = 'multi-user.target'

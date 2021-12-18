@@ -2,8 +2,12 @@
 
 # Import dependencies
 from fastluks import __version__
-from luksctl_api.luksctl_run import *
+from luksctl_api import __path__ as luksctl_api_path_list
+from luksctl_api import __prefix__ as environment_prefix
+from luksctl_api.luksctl_run import master, wn
 import argparse
+
+luksctl_api_path = luksctl_api_path_list[0]
 
 #______________________________________
 def cli_options():
@@ -15,12 +19,11 @@ def cli_options():
     master_parser.add_argument('--infrastructure-config', choices=['single_vm','cluster'], dest='infra_config', help='Infrastructure configuration')
     master_parser.add_argument('--virtualization-type', default=None, dest='virtualization_type', help='Virtualization type')
     master_parser.add_argument('--node-list', nargs='*', dest='node_list', default=None, help='Worker nodes IPs')
-    master_parser.add_argument('--fastluks-venv', default='/opt/fastluks', dest='fastluks_venv', help='fastluks virtual environment path')
+    master_parser.add_argument('--ssl', action='store_true', dest='ssl', default=False, help='Use ssl self signed certificate')
     master_parser.set_defaults(setup_function=master_setup)
 
     wn_parser = subparsers.add_parser('wn')
     wn_parser.add_argument('--nfs-mountpoint-list', nargs='*', dest='nfs_mountpoint_list', help='NFS mountpoint list')
-    wn_parser.add_argument('--fastluks-venv', default='/opt/fastluks', dest='fastluks_venv', help='fastluks virtual environment path')
     wn_parser.set_defaults(setup_function=wn_setup)
 
     return parser.parse_args()
@@ -33,7 +36,7 @@ def master_setup(options):
 
     master_node.write_api_config()
 
-    master_node.write_systemd_unit_file(options.fastluks_venv)
+    master_node.write_systemd_unit_file(working_directory=luksctl_api_path, environment_prefix=environment_prefix, ssl=options.ssl)
 
 
 #______________________________________
@@ -43,7 +46,7 @@ def wn_setup(options):
 
     wn_node.write_api_config()
 
-    wn_node.write_systemd_unit_file(options.fastluks_venv)
+    wn_node.write_systemd_unit_file(working_directory=luksctl_api_path, environment_prefix=environment_prefix)
 
 
 #______________________________________
@@ -52,5 +55,5 @@ if __name__ == "__main__":
 
     if options.version:
         print('fastluks package: ' + __version__)
-
-    options.setup_function(options)
+    else:
+        options.setup_function(options)
