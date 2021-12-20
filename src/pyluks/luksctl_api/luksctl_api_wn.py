@@ -5,12 +5,7 @@ import logging
 from configparser import ConfigParser
 
 # Import internal dependencies
-from fastluks import run_command
 from .luksctl_run import wn
-
-
-# Create logging facility
-logging.basicConfig(filename='/tmp/luksctl-api.log', format='%(levelname)s %(asctime)s %(message)s', level='DEBUG')
 
 
 

@@ -5,12 +5,7 @@ import logging
 from configparser import ConfigParser
 
 # Import internal dependencies
-from fastluks import run_command
-from .luksctl_run import master
-
-
-# Create logging facility
-logging.basicConfig(filename='/tmp/luksctl-api.log', format='%(levelname)s %(asctime)s %(message)s', level='DEBUG')
+from .luksctl_run import master, api_logger
 
 
 
@@ -29,12 +24,12 @@ if os.path.exists(luks_cryptdev_file):
     api_config = config['luksctl_api']
 
     # Set variables from cryptdev ini file
-    infra_config = api_config['INFRASTRUCTURE_CONFIGURATION']
+    infrastructure_config = api_config['INFRASTRUCTURE_CONFIGURATION']
     virtualization_type = api_config['VIRTUALIZATION_TYPE'] if 'VIRTUALIZATION_TYPE' in api_config else None
     node_list = api_config['WN_IPS'] if 'WN_IPS' in api_config else None
     
     # Define node instance
-    master_node = master(infra_config, virtualization_type, node_list)
+    master_node = master(infrastructure_config, virtualization_type, node_list)
 
 else:
     raise FileNotFoundError('Cryptdev ini file missing.')
@@ -65,7 +60,7 @@ def luksopen():
        abort(400)
 
     if master_node.get_node_list() != None:
-        logging.debug(master_node.get_node_list())
+        api_logger.debug(master_node.get_node_list())
 
     return master_node.open(request.json['vault_url'],
                             request.json['vault_token'],

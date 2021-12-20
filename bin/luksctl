@@ -4,43 +4,48 @@
 import sys, os
 import argparse
 from configparser import ConfigParser
-from fastluks import __version__
-from luksctl import LUKSCtl
 
-#______________________________________
-# read /etc/luks/luks-cryptdev.ini configuration file
-luks_config_file = '/etc/luks/luks-cryptdev.ini'
+# Import internal dependencies
+from pyluks import __version__
+from pyluks.luksctl import LUKSCtl
 
-# Init luksctl management object
-luks = LUKSCtl(luks_config_file)
 
-#______________________________________
+
+################################################################################
+# COMMAND LINE OPTIONS
+
 def cli_options():
     parser = argparse.ArgumentParser(description='LUKS storage management script')
-    parser.add_argument('action', choices=['open','close','status'], nargs='?', help='Action')
     parser.add_argument('-V', '--version', action='store_true', dest='version', default=False, help='Print luksctl version')
+    subparsers = parser.add_subparsers(help='luksctl action')
+
+    open_parser = subparsers.add_parser('open')
+    open_parser.set_defaults(luksctl_function=luks.luksopen_device)
+
+    close_parser = subparsers.add_parser('close')
+    close_parser.set_defaults(luksctl_function=luks.luksclose_device)
+
+    status_parser = subparsers.add_parser('status')
+    status_parser.set_defaults(luksctl_function=luks.display_dmsetup_info)
+    
     return parser.parse_args()
 
-#______________________________________
-def luksctl():
 
+
+################################################################################
+# MAIN
+
+if __name__ == '__main__':
+
+    # configuration file
+    luks_config_file = '/etc/luks/luks-cryptdev.ini'
+
+    # Init luksctl management object
+    luks = LUKSCtl(luks_config_file)
+    
     options = cli_options()
 
     if options.version is True:
         print('fastluks package: ' + __version__)
-
-    elif options.action == "status":
-        luks.display_dmsetup_info()
-
-    elif options.action == "open":
-        luks.luksopen_device()
-
-    elif options.action == "close":
-        luks.luksclose_device()
-
     else:
-        argparse.ArgumentParser().error("Invalid choice (choose from 'status', 'open', 'close')")
-
-#______________________________________
-if __name__ == '__main__':
-    luksctl()
+        options.luksctl_function()

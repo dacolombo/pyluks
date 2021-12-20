@@ -1,5 +1,4 @@
 # Import dependencies
-import logging
 import random
 from string import ascii_letters, digits, ascii_lowercase
 import os
@@ -8,72 +7,44 @@ from pathlib import Path
 from datetime import datetime
 import re
 import zc.lockfile
+import distro
 from configparser import ConfigParser
 
 # Import internal dependencies
-from .common import run_command
-from .vault_support import write_secret_to_vault
+from ..utilities import run_command, create_logger
+from ..vault_support import write_secret_to_vault
+
 
 
 ################################################################################
 # VARIABLES
+
 alphanum = ascii_letters + digits
-LOGFILE = '/tmp/fast_luks.log'
 time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 now = datetime.now().strftime('-%b-%d-%y-%H%M%S')
-
 # Get Distribution
 # Ubuntu and centos currently supported
-try:
-    with open('/etc/os-release', 'r') as f:
-        os_file = f.read()
-        regex = r'\sID="?(\w+)"?\n'
-        ID = re.search(regex, os_file).group()
-        DISTNAME = 'ubuntu' if ID == 'ubuntu' else 'centos'
-except FileNotFoundError:
-    print("Not running a distribution with /etc/os-release available")
+DISTNAME = distro.id()
+if DISTNAME not in ['ubuntu','centos']:
+    raise Exception('Distribution not supported: Ubuntu and Centos currently supported')
 
 
 
 ################################################################################
-# FUNCTIONS
+# LOGGING FACILITY
+
+LOGFILE = '/tmp/fastluks.log'
+LOGGER_NAME = 'fastluks'
+fastluks_logger = create_logger(logfile=LOGFILE, name=LOGGER_NAME)
 
 #____________________________________
-# Intro banner
-def intro():
-    NEW_PWD = ''
-    while not (re.search(r'\w', NEW_PWD) and re.search(r'\d', NEW_PWD)):
-        NEW_PWD = ''.join([random.choice(alphanum) for i in range(8)])
-    
-    print('=========================================================')
-    print('                      ELIXIR-Italy')
-    print('               Filesystem encryption script\n')             
-    print('A password with at least 8 alphanumeric string is needed')
-    print("There's no way to recover your password.")
-    print('Example (automatic random generated passphrase):')
-    print(f'                      {NEW_PWD}\n')
-    print('You will be required to insert your password 3 times:')
-    print('  1. Enter passphrase')
-    print('  2. Verify passphrase')
-    print('  3. Unlock your volume\n')
-    print('=========================================================')
-
-
-#____________________________________
-# Log levels:
-# DEBUG
-# INFO
-# WARNING
-# ERROR
-
-# Check if loglevel is valid
+# Custom stdout logger
 def check_loglevel(loglevel):
     valid_loglevels = ['INFO','DEBUG','WARNING','ERROR']
     if loglevel not in valid_loglevels:
         raise ValueError(f'loglevel must be one of {valid_loglevels}')
 
 
-# Echo function
 def echo(loglevel, text):
     check_loglevel(loglevel)
     message = f'{loglevel} {time} {text}\n'
@@ -81,14 +52,13 @@ def echo(loglevel, text):
     return message
 
 
-# Logs config
-logging.basicConfig(filename=LOGFILE, filemode='a+', level=0, format='%(levelname)s %(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
+################################################################################
+# FUNCTIONS
 
 #____________________________________
 # Lock/UnLock Section
 def lock(LOCKFILE):
-
     # Start locking attempt
     try:
         lock = zc.lockfile.LockFile(LOCKFILE, content_template='{pid};{hostname}') # storing the PID and hostname in LOCKFILE
@@ -109,7 +79,6 @@ def lock(LOCKFILE):
     sys.exit(2)
 
 
-#____________________________________
 def unlock(lock, LOCKFILE, do_exit=True, message=None):
     lock.close()
     os.remove(LOCKFILE)
@@ -117,18 +86,17 @@ def unlock(lock, LOCKFILE, do_exit=True, message=None):
         sys.exit(f'UNLOCK: {message}')
 
 
-#____________________________________
 def unlock_if_false(function_return, lock, LOCKFILE, message=None):
     if function_return == False:
         unlock(lock, LOCKFILE, message=message)
 
 
 #____________________________________
+# Volume encryption and setup functions
 def create_random_cryptdev_name():
     return ''.join([random.choice(ascii_lowercase) for i in range(8)])
 
 
-#____________________________________
 def info(device, cipher_algorithm, hash_algorithm, keysize, cryptdev, mountpoint, filesystem):
     echo('DEBUG', f'LUKS header information for {device}')
     echo('DEBUG', f'Cipher algorithm: {cipher_algorithm}')
@@ -141,8 +109,6 @@ def info(device, cipher_algorithm, hash_algorithm, keysize, cryptdev, mountpoint
     echo('DEBUG', f'File system: {filesystem}')
 
 
-#____________________________________
-# Install cryptsetup
 def install_cryptsetup(LOGFILE=None):
     if DISTNAME == 'ubuntu':
         echo('INFO', 'Distribution: Ubuntu. Using apt.')
@@ -152,8 +118,6 @@ def install_cryptsetup(LOGFILE=None):
         run_command('yum install -y cryptsetup-luks pv', LOGFILE)
 
 
-#____________________________________
-# Check cryptsetup installation
 def check_cryptsetup():
     echo('INFO', 'Check if the required applications are installed...')
     
@@ -172,13 +136,10 @@ def check_cryptsetup():
         echo('INFO', 'cryptsetup installed.')
 
 
-#____________________________________
-# Passphrase Random generation
 def create_random_secret(passphrase_length):
     return ''.join([random.choice(alphanum) for i in range(passphrase_length)])
 
 
-#____________________________________
 def end_encrypt_procedure(SUCCESS_FILE):
     # send signal to unclok waiting condition for automation software (e.g Ansible)
     with open(SUCCESS_FILE, 'w') as success_file:
@@ -186,39 +147,13 @@ def end_encrypt_procedure(SUCCESS_FILE):
     echo('INFO', 'SUCCESSFUL.')
 
 
-#____________________________________
 def end_volume_setup_procedure(SUCCESS_FILE):
     # send signal to unclok waiting condition for automation software (e.g Ansible)
     with open(SUCCESS_FILE,'w') as success_file:
-        success_file.write('Volume setup completed.')
+        success_file.write('Volume setup completed.') # WARNING DO NOT MODFIFY THIS LINE, THIS IS A CONTROL STRING FOR ANSIBLE
     echo('INFO', 'SUCCESSFUL.')
 
 
-#____________________________________
-def load_default_config(defaults_file='./defaults.conf'):
-    global cipher_algorithm, keysize, hash_algorithm, device, cryptdev, mountpoint, filesystem, paranoid, non_interactive, foreground, luks_cryptdev_file, luks_header_backup
-
-    if os.path.isfile(defaults_file):
-        logging.info('Loading default configuration from defaults.conf')
-        config = ConfigParser()
-        config.read_file(open(defaults_file))
-        defaults = config['defaults']
-        cipher_algorithm = defaults['cipher_algorithm']
-        keysize = defaults['keysize']
-        hash_algorithm = defaults['hash_algorithm']
-        device = defaults['device']
-        cryptdev = defaults['cryptdev']
-        mountpoint = defaults['mountpoint']
-        filesystem = defaults['filesystem']
-        paranoid = defaults['paranoid']
-        non_interactive = defaults['non_interactive']
-        foreground = defaults['foreground']
-        luks_cryptdev_file = defaults['luks_cryptdev_file']
-        luks_header_backup = defaults['luks_header_backup']
-
-
-#____________________________________
-# Read ini file
 def read_ini_file(cryptdev_ini_file):
     config = ConfigParser()
     config.read_file(open(cryptdev_ini_file))
@@ -226,7 +161,6 @@ def read_ini_file(cryptdev_ini_file):
     return {key:luks_section[key] for key in luks_section}
 
 
-#____________________________________
 def check_passphrase(passphrase_length, passphrase, passphrase_confirmation):
     if passphrase_length == None:
         if passphrase == None:
@@ -245,72 +179,80 @@ def check_passphrase(passphrase_length, passphrase, passphrase_confirmation):
             return s3cret
 
 
-################################################################################
-# CLASSES
 
-#____________________________________
+################################################################################
+# DEVICE CLASSE
+
 class device:
-    
+
+
     def __init__(self, device_name, cryptdev, mountpoint, filesystem):
         self.device_name = device_name
         self.cryptdev = cryptdev
         self.mountpoint = mountpoint
         self.filesystem = filesystem
-    
+
+
     def check_vol(self):
-        logging.debug('Checking storage volume.')
+        fastluks_logger.debug('Checking storage volume.')
 
         # Check if a volume is already mounted to mountpoint
         if os.path.ismount(self.mountpoint):
             mounted_device, _, _ = run_command(f'df -P {self.mountpoint} | tail -1 | cut -d" " -f 1')
-            logging.debug(f'Device name: {mounted_device}')
+            fastluks_logger.debug(f'Device name: {mounted_device}')
 
         else:
             # Check if device_name is a volume
             if Path(self.device_name).is_block_device():
-                logging.debug(f'External volume on {self.device_name}. Using it for encryption.')
+                fastluks_logger.debug(f'External volume on {self.device_name}. Using it for encryption.')
                 if not os.path.isdir(self.mountpoint):
-                    logging.debug(f'Creating {self.mountpoint}')
+                    fastluks_logger.debug(f'Creating {self.mountpoint}')
                     os.makedirs(self.mountpoint, exist_ok=True)
-                    logging.debug(f'Device name: {self.device_name}')
-                    logging.debug(f'Mountpoint: {self.mountpoint}')
+                    fastluks_logger.debug(f'Device name: {self.device_name}')
+                    fastluks_logger.debug(f'Mountpoint: {self.mountpoint}')
             else:
-                logging.error('Device not mounted, exiting! Please check logfile:')
-                logging.error(f'No device mounted to {self.mountpoint}')
+                fastluks_logger.error('Device not mounted, exiting! Please check logfile:')
+                fastluks_logger.error(f'No device mounted to {self.mountpoint}')
                 run_command('df -h', LOGFILE=LOGFILE)
                 return False # unlock and terminate process
-    
+
+
     def is_encrypted(self):
-        logging.debug('Checking if the volume is already encrypted.')
+        fastluks_logger.debug('Checking if the volume is already encrypted.')
         devices, _, _ = run_command('lsblk -p -o NAME,FSTYPE')
         if re.search(f'{self.device_name}\s+crypto_LUKS', devices):
-                logging.info('The volume is already encrypted')
+                fastluks_logger.info('The volume is already encrypted')
                 return True
         else:
             return False
 
+
     def umount_vol(self):
-        logging.info('Umounting device.')
+        fastluks_logger.info('Umounting device.')
         run_command(f'umount {self.mountpoint}', LOGFILE=LOGFILE)
-        logging.info(f'{self.device_name} umounted, ready for encryption!')
+        fastluks_logger.info(f'{self.device_name} umounted, ready for encryption!')
+
 
     def luksFormat(self, s3cret, cipher_algorithm, keysize, hash_algorithm):
         return run_command(f'printf "{s3cret}\n" | cryptsetup -v --cipher {cipher_algorithm} --key-size {keysize} --hash {hash_algorithm} --iter-time 2000 --use-urandom luksFormat {self.device_name} --batch-mode')
 
+
     def luksHeaderBackup(self, luks_header_backup_dir, luks_header_backup_file):
         return run_command(f'cryptsetup luksHeaderBackup --header-backup-file {luks_header_backup_dir}/{luks_header_backup_file} {self.device_name}')
+
 
     def luksOpen(self, s3cret):
         return run_command(f'printf "{s3cret}\n" | cryptsetup luksOpen {self.device_name} {self.cryptdev}')
 
+
     def setup_device(self, luks_header_backup_dir, luks_header_backup_file, cipher_algorithm, keysize, hash_algorithm,
                     passphrase_length, passphrase, passphrase_confirmation, use_vault, vault_url, wrapping_token, secret_path, user_key):
             echo('INFO', 'Start the encryption procedure.')
-            logging.info(f'Using {cipher_algorithm} algorithm to luksformat the volume.')
-            logging.debug('Start cryptsetup')
+            fastluks_logger.info(f'Using {cipher_algorithm} algorithm to luksformat the volume.')
+            fastluks_logger.debug('Start cryptsetup')
             info(self.device_name, cipher_algorithm, hash_algorithm, keysize, self.cryptdev, self.mountpoint, self.filesystem)
-            logging.debug('Cryptsetup full command:')
-            logging.debug('cryptsetup -v --cipher $cipher_algorithm --key-size $keysize --hash $hash_algorithm --iter-time 2000 --use-urandom --verify-passphrase luksFormat $device --batch-mode')
+            fastluks_logger.debug('Cryptsetup full command:')
+            fastluks_logger.debug(f'cryptsetup -v --cipher {cipher_algorithm} --key-size {keysize} --hash {hash_algorithm} --iter-time 2000 --use-urandom --verify-passphrase luksFormat {device} --batch-mode')
 
             s3cret = check_passphrase(passphrase_length, passphrase, passphrase_confirmation)
             if s3cret == False:
@@ -337,13 +279,14 @@ class device:
                 # 3 out of memory
                 # 4 wrong device specified
                 # 5 device already exists or device is busy.
-                logging.error(f'Command cryptsetup failed with exit code {luksHeaderBackup_ec}! Mounting {self.device_name} to {self.mountpoint} and exiting.')
+                fastluks_logger.error(f'Command cryptsetup failed with exit code {luksHeaderBackup_ec}! Mounting {self.device_name} to {self.mountpoint} and exiting.')
                 if luksHeaderBackup_ec == 2:
                     echo('ERROR', 'Bad passphrase. Please try again.')
                 return False # unlock and exit
 
             return s3cret
-    
+
+
     def open_device(self, s3cret):
         echo('INFO', 'Open LUKS volume')
         if not Path(f'/dev/mapper{self.cryptdev}').is_block_device():
@@ -355,30 +298,23 @@ class device:
                     return False # unlock and exit
                 else:
                     echo('ERROR', f'Crypt device already exists! Please check logs: {LOGFILE}')
-                    logging.error('Unable to luksOpen device.')
-                    logging.error(f'/dev/mapper/{self.cryptdev} already exists.')
-                    logging.error(f'Mounting {self.device_name} to {self.mountpoint} again.')
+                    fastluks_logger.error('Unable to luksOpen device.')
+                    fastluks_logger.error(f'/dev/mapper/{self.cryptdev} already exists.')
+                    fastluks_logger.error(f'Mounting {self.device_name} to {self.mountpoint} again.')
                     run_command(f'mount {self.device_name} {self.mountpoint}', LOGFILE=LOGFILE)
                     return False # unlock and exit
-    
+
+
     def encryption_status(self):
-        logging.info(f'Check {self.cryptdev} status with cryptsetup status')
+        fastluks_logger.info(f'Check {self.cryptdev} status with cryptsetup status')
         run_command(f'cryptsetup -v status {self.cryptdev}', LOGFILE=LOGFILE)
-    
+
+
     def create_cryptdev_ini_file(self, luks_cryptdev_file, cipher_algorithm, hash_algorithm, keysize, luks_header_backup_dir, luks_header_backup_file,
                                  save_passphrase_locally, s3cret, now=now):
         luksUUID, _, _ = run_command(f'cryptsetup luksUUID {self.device_name}')
 
         with open(luks_cryptdev_file, 'w') as f:
-            f.write('# This file has been generated using fast_luks.sh script\n')
-            f.write('# https://github.com/mtangaro/galaxycloud-testing/blob/master/fast_luks.sh\n')
-            f.write('# The device name could change after reboot, please use UUID instead.\n')
-            f.write('# LUKS provides a UUID (Universally Unique Identifier) for each device.\n')
-            f.write('# This, unlike the device name (eg: /dev/vdb), is guaranteed to remain constant\n')
-            f.write('# as long as the LUKS header remains intact.\n')
-            f.write(f'# LUKS header information for {self.device_name}\n')
-            f.write(f'# luks-{now}\n')
-
             config = ConfigParser()
             config.add_section('luks')
             config_luks = config['luks']
@@ -403,30 +339,34 @@ class device:
         run_command(f'dmsetup info /dev/mapper/{self.cryptdev}', LOGFILE=LOGFILE)
         run_command(f'cryptsetup luksDump {self.device_name}', LOGFILE=LOGFILE)
 
+
     def wipe_data(self):
         echo('INFO', 'Paranoid mode selected. Wiping disk')
-        logging.info('Wiping disk data by overwriting the entire drive with random data.')
-        logging.info('This might take time depending on the size & your machine!')
+        fastluks_logger.info('Wiping disk data by overwriting the entire drive with random data.')
+        fastluks_logger.info('This might take time depending on the size & your machine!')
         
         run_command(f'dd if=/dev/zero of=/dev/mapper/{self.cryptdev} bs=1M status=progress')
         
-        logging.info(f'Block file /dev/mapper/{self.cryptdev} created.')
-        logging.info('Wiping done.')
+        fastluks_logger.info(f'Block file /dev/mapper/{self.cryptdev} created.')
+        fastluks_logger.info('Wiping done.')
+
 
     def create_fs(self):
         echo('INFO', 'Creating filesystem.')
-        logging.info(f'Creating {self.filesystem} filesystem on /dev/mapper/{self.cryptdev}')
+        fastluks_logger.info(f'Creating {self.filesystem} filesystem on /dev/mapper/{self.cryptdev}')
         _, _, mkfs_ec = run_command(f'mkfs -t {self.filesystem} /dev/mapper/{self.cryptdev}', LOGFILE=LOGFILE)
         if mkfs_ec != 0:
             echo('ERROR', f'While creating {self.filesystem} filesystem. Please check logs.')
             echo('ERROR', 'Command mkfs failed!')
             return False # unlock and exit
-    
+
+
     def mount_vol(self):
         echo('INFO', 'Mounting encrypted device.')
-        logging.info(f'Mounting /dev/mapper/{self.cryptdev} to {self.mountpoint}')
+        fastluks_logger.info(f'Mounting /dev/mapper/{self.cryptdev} to {self.mountpoint}')
         run_command(f'mount /dev/mapper/{self.cryptdev} {self.mountpoint}', LOGFILE=LOGFILE)
         run_command('df -Hv', LOGFILE=LOGFILE)
+
 
     def encrypt(self, cipher_algorithm, keysize, hash_algorithm, luks_header_backup_dir, luks_header_backup_file, 
                LOCKFILE, SUCCESS_FILE, luks_cryptdev_file, passphrase_length, passphrase, passphrase_confirmation,
@@ -457,7 +397,8 @@ class device:
         end_encrypt_procedure(SUCCESS_FILE) # LUKS encryption finished. Print end dialogue.
 
         unlock(locked, LOCKFILE, do_exit=False) # Unlock
-    
+
+
     def volume_setup(self, cipher_algorithm, hash_algorithm, keysize, luksUUID, luks_header_backup_dir,
                      luks_header_backup_file, LOCKFILE, SUCCESS_FILE):
         
@@ -472,14 +413,17 @@ class device:
         unlock(locked, LOCKFILE, do_exit=False) # Unlock once done
 
 
-################################################################################
-# MAIN SCRIPT FUNCTION
 
-def main_script(device_name='/dev/vdb', cryptdev='crypt', mountpoint='/export', filesystem='ext4',
-                cipher_algorithm='aes-xts-plain64', keysize=256, hash_algorithm='sha256', luks_header_backup_dir='/etc/luks',
-                luks_header_backup_file='luks-header.bck', luks_cryptdev_file='/etc/luks/luks-cryptdev.ini',
-                passphrase_length=8, passphrase=None, passphrase_confirmation=None, save_passphrase_locally=None,
-                use_vault=False, vault_url=None, wrapping_token=None, secret_path=None, user_key=None):
+################################################################################
+# FASTLUKS SCRIPT FUNCTION
+
+def encrypt_and_setup(device_name='/dev/vdb', cryptdev='crypt', mountpoint='/export',
+                      filesystem='ext4', cipher_algorithm='aes-xts-plain64', keysize=256,
+                      hash_algorithm='sha256', luks_header_backup_dir='/etc/luks',
+                      luks_header_backup_file='luks-header.bck', luks_cryptdev_file='/etc/luks/luks-cryptdev.ini',
+                      passphrase_length=8, passphrase=None, passphrase_confirmation=None,
+                      save_passphrase_locally=None, use_vault=False, vault_url=None,
+                      wrapping_token=None, secret_path=None, user_key=None):
     
     if not os.geteuid() == 0:
         sys.exit('Error: Script must be run as root.')

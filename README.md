@@ -1,15 +1,22 @@
-# fastluks
-Python scripts for storage encryption through LUKS. Converted into a python package from [fast-luks](https://github.com/Laniakea-elixir-it/fast-luks) and [luksctl](https://github.com/Laniakea-elixir-it/luksctl)
+# pyluks
+pyluks is a python package for storage encryption through LUKS, wrapping the functionalities provided by the cryptsetup command line tool.
 
-For this package to work properly, both the installation and usage procedure must be run as superuser either in an Ubuntu or CentOS machine.
+The pyluks package is structured in three subpackages:
+* **fastluks** contains the `device` class which can be used to encrypt, access and manage storage devices. fastluks is based on the bash script [fast-luks](https://github.com/Laniakea-elixir-it/fast-luks).
+* **luksctl** can be used to manage encrypted devices. It is based on the python package [luksctl](https://github.com/Laniakea-elixir-it/luksctl).
+* **luksctl_api** is an API to check the status of encrypted volumes and open them if needed. It is based on the python package [luksctl_api](https://github.com/Laniakea-elixir-it/luksctl_api).
+
 
 ## Installation
-The procedure to setup a virtual environment and install the package on CentOS is the following:
+Currently, Ubuntu and CentOS are supported.
+
+To setup a virtual environment and install pyluks on CentOS run:
 ```bash
 yum install -y python3
 python3 -m venv venv
 . venv/bin/activate
-pip install fastluks
+pip install --upgrade pip
+pip install pyluks
 ```
 To do the same on Ubuntu:
 ```bash
@@ -17,16 +24,20 @@ apt-get update
 apt-get install -y python3 python3-pip python3-venv
 python3 -m venv venv
 . venv/bin/activate
-pip install fastluks
+pip install --upgrade pip
+pip install pyluks
 ```
 
-## Usage: fastluks
+# Usage
+Each subpackage functionalities can be accessed thorugh a command line tool.
+
+## fastluks
 To perform encryption and volume setup with default parameters, the `fastluks` command can be used inside the virtual environment:
 ```bash
 fastluks
 ```
 The encryption passphrase can be stored locally and/or on Hashicorp Vault.
-- To store the passphrase locally:
+- To store the passphrase locally (this is usually done for testing purposes):
 ```bash
 fastluks --save-passphrase-locally
 ```
@@ -36,9 +47,7 @@ fastluks --vault --vault-url <i>url</i> --wrapping-token <i>token</i> --secret-p
 </pre>
 
 
-
-
-## Usage: luksctl
+## luksctl
 In order to manage a volume encrypted with fastluks, the command `luksctl` can be used from the command line:
 ```bash
 # Display volume status
@@ -50,3 +59,21 @@ luksctl open
 # Close encrypted volume
 luksctl close
 ```
+
+
+## luksctl_api
+In order to setup the API, the command `luksctl_api` can be used indicating the type of computing node on which the API is installed and its options, for example:
+```bash
+# Install the API on a single virtual machine, using a self signed certificate
+luksctl_api master --infrastructure_config single_vm --ssl --user luksctl_api
+```
+```bash
+# Install the API on the master node of a cloud using a self signed certificate
+luksctl_api master --infrastructure_config cluster --ssl --node-list wn1 wn2 wn3 
+```
+```bash
+# Install the API on a computing node
+luksctl_api wn --nfs-mountpoint-list /export
+```
+
+By default, the API service is run by the user `luksctl_api`, which should have the permission to run the `luksctl` command. To run the API under a different user specify the `--user` argument.

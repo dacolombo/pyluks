@@ -1,38 +1,45 @@
 # import dependencies
 import os, sys
-import logging
 from configparser import ConfigParser
 
 # Import internal dependencies
-from fastluks import run_command
+from ..utilities import run_command, create_logger
 
-#______________________________________
-# Log config
-#from .common_logging import set_log
-#logs = set_log('/tmp/luksctl.log', 'DEBUG')
-logging.basicConfig(filename='/tmp/luksctl.log', filemode='a+', level=0, format='%(levelname)s %(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
-#______________________________________
+
+################################################################################
+# LOGGING FACILITY
+LOGFILE = '/tmp/luksctl.log'
+LOGGER_NAME = 'luksctl'
+luksctl_logger = create_logger(logfile=LOGFILE, name=LOGGER_NAME)
+
+
+
+################################################################################
+# LUKSCtl class
+
 class LUKSCtl:
-    def __init__(self, fname):
 
-        self.fname = fname
+
+    def __init__(self, config_file):
+
+        self.config_file = config_file
 
         config = ConfigParser()
-        config.read_file(open(fname))
+        config.read(config_file)
+        luks_config = config['luks']
 
-        self.cipher_algorithm = config.get('luks', 'cipher_algorithm')
-        self.hash_algorithm = config.get('luks', 'hash_algorithm')
-        self.keysize = config.get('luks', 'keysize')
-        self.device = config.get('luks', 'device')
-        self.uuid = config.get('luks', 'uuid')
-        self.cryptdev = config.get('luks', 'cryptdev')
-        self.mapper = config.get('luks', 'mapper')
-        self.mountpoint = config.get('luks', 'mountpoint')
-        self.filesystem = config.get('luks', 'filesystem')
+        self.cipher_algorithm = luks_config['cipher_algorithm']
+        self.hash_algorithm = luks_config['hash_algorithm']
+        self.keysize = luks_config['keysize']
+        self.device = luks_config['device']
+        self.uuid = luks_config['uuid']
+        self.cryptdev = luks_config['cryptdev']
+        self.mapper = luks_config['mapper']
+        self.mountpoint = luks_config['mountpoint']
+        self.filesystem = luks_config['filesystem']
 
-    #______________________________________
-    # getter
+
     def get_cipher_algorithm(self): return self.cipher_algorithm
     def get_hash_algorithm(self): return self.hash_algorithm
     def get_keysize(self): return self.keysize
@@ -43,8 +50,7 @@ class LUKSCtl:
     def get_mountpoint(self): return self.mountpoint
     def get_filesystem(self): return self.filesystem
 
-    #______________________________________
-    # setter
+
     def set_cipher_algorithm(self, cipher_algorithm): self.cipher_algorithm = cipher_algorithm
     def set_hash_algorithm(self, hash_algorithm): self.hash_algorithm = hash_algorithm
     def set_keysize(self, keysize): keysize = keysize
@@ -55,47 +61,46 @@ class LUKSCtl:
     def set_mountpoint(self, mountpoint): self.mountpoint = mountpoint
     def set_filesystem(self, filesystem): self.filesystem = filesystem
 
-    #____________________________________
-    # dmsetup info
+
     def dmsetup_info(self):
+
         _, _, status = run_command(f'dmsetup info /dev/mapper/{self.cryptdev}')
         return status
   
-    #____________________________________
-    # Display dmsetup info
+
     def display_dmsetup_info(self):
+
         stdOutValue, stdErrValue, status = run_command(f'dmsetup info /dev/mapper/{self.cryptdev}')
-    
+
         if str(status) == '0':
             print(stdOutValue)
             print('Encrypted volume: [ OK ]')
             sys.exit(0)
         else:
-            logging.error(f'[luksctl] {stdErrValue}')
+            luksctl_logger.error(f'[luksctl] {stdErrValue}')
             print('Encrypted volume: [ FAIL ]')
             sys.exit(1)
     
-    #______________________________________
-    # luksOpen device
+
     def luksopen_device(self):
+
         run_command(f'cryptsetup luksOpen /dev/disk/by-uuid/{self.uuid} {self.cryptdev}')
     
         _, _, status = run_command(f'mount /dev/mapper/{self.cryptdev} {self.mountpoint}')
     
         if str(status) == '0':
-            os.system(f'chown galaxy:galaxy {self.mountpoint}')
             self.display_dmsetup_info()
         else:
             print('Encrypted volume mount: [ FAIL ]')
             sys.exit(1)
     
-    #______________________________________
-    # luksClose device
+
     def luksclose_device(self):
+
         run_command(f'umount {self.mountpoint}') # Unmount device
-    
+
         run_command(f'cryptsetup close {self.cryptdev}') # Close device
-    
+
         # if dmsetup_setup fails (status 1) the volume has been correctly closed
         if str(self.dmsetup_info()) == '0':
             print('Encrypted volume umount: [ FAIL ]')
