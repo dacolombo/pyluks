@@ -98,10 +98,20 @@ class master:
             config.write(sf)
 
 
+    def which(self,name):
+
+      PATH="/opt/pyluks/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  
+      for path in PATH.split(os.path.pathsep):
+        full_path = path + os.sep + name
+        if os.path.exists(full_path):
+          return str(full_path)
+
+
     def get_status(self):
 
-        status_command = 'sudo luksctl status'
-        status, stdout, stderr = run_command(status_command)
+        status_command = self.which('sudo') + ' ' + self.which('luksctl') + ' status'
+        stdout, stderr, status = run_command(status_command)
 
         api_logger.debug(f'Volume status stdout: {stdout}')
         api_logger.debug(f'Volume status stderr: {stderr}')
