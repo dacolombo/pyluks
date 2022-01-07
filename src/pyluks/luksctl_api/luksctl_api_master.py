@@ -44,7 +44,7 @@ else:
 @app.route('/luksctl_api/v1.0/status', methods=['GET'])
 def get_status():
     
-    return master.get_status()
+    return master_node.get_status()
 
 
 #______________________________________
