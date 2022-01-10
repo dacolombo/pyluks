@@ -1,5 +1,6 @@
 # Import dependencies
-from flask import Flask, jsonify, request
+from flask import Flask
+import json
 import os
 import logging
 from configparser import ConfigParser
@@ -24,7 +25,7 @@ if os.path.exists(luks_cryptdev_file):
     api_config = config['luksctl_api']
 
     # Set variables from cryptdev ini file
-    nfs_mountpoint_list = api_config['NFS_MOUNTPOINT_LIST'] if 'NFS_MOUNTPOINT_LIST' in api_config else None
+    nfs_mountpoint_list = json.loads(api_config['NFS_MOUNTPOINT_LIST']) if 'NFS_MOUNTPOINT_LIST' in api_config else None
     
     # Define node instance
     wn_node = wn(nfs_mountpoint_list)
@@ -40,4 +41,4 @@ def get_status():
 
 @app.route('/luksctl_api_wn/v1.0/nfs-mount', methods=['POST'])
 def nfs_mount():
-    return wn.nfs_mount()
+    return wn_node.nfs_mount()

@@ -1,5 +1,6 @@
 # Import dependencies
-from flask import Flask, jsonify, request
+from flask import Flask, request, abort
+import json
 import os
 import logging
 from configparser import ConfigParser
@@ -24,9 +25,9 @@ if os.path.exists(luks_cryptdev_file):
     api_config = config['luksctl_api']
 
     # Set variables from cryptdev ini file
-    infrastructure_config = api_config['INFRASTRUCTURE_CONFIGURATION']
+    infrastructure_config = api_config['INFRASTRUCTURE_CONFIGURATION'] if 'INFRASTRUCTURE_CONFIGURATION' in api_config else None
     virtualization_type = api_config['VIRTUALIZATION_TYPE'] if 'VIRTUALIZATION_TYPE' in api_config else None
-    node_list = api_config['WN_IPS'] if 'WN_IPS' in api_config else None
+    node_list = json.loads(api_config['WN_IPS']) if 'WN_IPS' in api_config else None
     
     # Define node instance
     master_node = master(infrastructure_config, virtualization_type, node_list)
@@ -59,11 +60,12 @@ def luksopen():
        not 'secret_key' in request.json:
        abort(400)
 
-    if master_node.get_node_list() != None:
-        api_logger.debug(master_node.get_node_list())
+    wn_list = master_node.get_node_list() 
+    if wn_list != None:
+        api_logger.debug(wn_list)
 
-    return master_node.open(request.json['vault_url'],
-                            request.json['vault_token'],
-                            request.json['secret_root'],
-                            request.json['secret_path'],
-                            request.json['secret_key'])
+    return master_node.open(vault_url=request.json['vault_url'],
+                            wrapping_token=request.json['vault_token'],
+                            secret_root=request.json['secret_root'],
+                            secret_path=request.json['secret_path'],
+                            secret_key=request.json['secret_key'])

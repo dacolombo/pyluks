@@ -1,7 +1,5 @@
 # Import dependencies
-from flask import jsonify
 import json, requests
-from pathlib import Path
 import os, sys, distro
 from configparser import ConfigParser
 
@@ -18,6 +16,26 @@ from .ssl_certificate import generate_self_signed_cert
 LOGFILE = '/tmp/luksctl-api.log'
 LOGGER_NAME = 'luksctl_api'
 api_logger = create_logger(logfile=LOGFILE, name=LOGGER_NAME)
+
+
+
+################################################################################
+# FUNCTIONS
+
+def which(name, luks_cryptdev_file='/etc/luks/luks-cryptdev.ini'):
+
+    try:
+        config = ConfigParser()
+        config.read(luks_cryptdev_file)
+        PATH_string = config['luksctl_api']['PATH']
+        PATH = PATH_string.split(':')
+    except:
+        PATH=['/opt/pyluks/bin','/usr/local/sbin','/usr/local/bin','/usr/sbin','/usr/bin','/sbin','/bin']
+
+    for path in PATH:
+        full_path = f'{path}/{name}'
+        if os.path.exists(full_path):
+            return str(full_path)
 
 
 
@@ -57,7 +75,9 @@ class master:
             api_config['VIRTUALIZATION_TYPE'] = self.virtualization_type
 
         if self.node_list != None:
-            api_config['WN_IPS'] = self.node_list
+            api_config['WN_IPS'] = json.dumps(self.node_list)
+
+        api_config['PATH'] = f'{sys.prefix}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
 
         with open(luks_cryptdev_file, 'w') as f:
             config.write(f)
@@ -98,19 +118,20 @@ class master:
             config.write(sf)
 
 
-    def which(self,name):
-
-      PATH="/opt/pyluks/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-  
-      for path in PATH.split(os.path.pathsep):
-        full_path = path + os.sep + name
-        if os.path.exists(full_path):
-          return str(full_path)
+    def write_exports_file(self, nfs_export_list=['/export']):
+        
+        with open('/etc/exports','a+') as exports_file:
+            for export_dir in nfs_export_list:
+                for node in self.node_list:
+                    exports_file.write(f'{export_dir} {node}:(rw,sync,no_root_squash)')
 
 
     def get_status(self):
 
-        status_command = self.which('sudo') + ' ' + self.which('luksctl') + ' status'
+        sudo = which('sudo')
+        luksctl = which('luksctl')
+
+        status_command = f'{sudo} {luksctl} status'
         stdout, stderr, status = run_command(status_command)
 
         api_logger.debug(f'Volume status stdout: {stdout}')
@@ -118,28 +139,35 @@ class master:
         api_logger.debug(f'Volume status: {status}')
 
         if str(status) == '0':
-            return jsonify({'volume_state': 'mounted' })
+            return json.dumps({'volume_state': 'mounted' })
         elif str(status)  == '1':
-            return jsonify({'volume_state': 'unmounted' })
+            return json.dumps({'volume_state': 'unmounted' })
         else:
-            return jsonify({'volume_state': 'unavailable', 'output': stdout, 'stderr': stderr })
+            return json.dumps({'volume_state': 'unavailable', 'output': stdout, 'stderr': stderr })
 
 
-    def open(self, vault_url, wrapping_token, path, secret_key, secret_root):
+    def open(self, vault_url, wrapping_token, secret_root, secret_path, secret_key):
 
-        status_command = 'sudo luksctl status'
-        status, stodut, stderr = exec_cmd(status_command)
+        sudo = which('sudo')
+        luksctl = which('luksctl')
+        
+        status_command = f'{sudo} {luksctl} status'
+        stdout, stderr, status = run_command(status_command)
 
         if str(status) == '0':
-            return jsonify({'volume_state': 'mounted'})
+            return json.dumps({'volume_state': 'mounted'})
         
         else:
             # Read passphrase from vault
-            secret = read_secret(vault_url, wrapping_token, path, secret_key, secret_root)
+            secret = read_secret(vault_url=vault_url,
+                                 wrapping_token=wrapping_token,
+                                 secret_root=secret_root,
+                                 secret_path=secret_path,
+                                 secret_key=secret_key)
             
             # Open volume
-            open_command = f'printf "{secret}\n" | sudo luksctl open' 
-            status, stdout, stderr = exec_cmd(command)
+            open_command = f'printf "{secret}\n" | {sudo} {luksctl} open' 
+            stdout, stderr, status = run_command(open_command)
 
             api_logger.debug(f'Volume status stdout: {stdout}')
             api_logger.debug(f'Volume status stderr: {stderr}')
@@ -150,29 +178,31 @@ class master:
                     self.nfs_restart()
                 elif self.virtualization_type == 'docker':
                     self.docker_restart
-                return jsonify({'volume_state': 'mounted' })
+                return json.dumps({'volume_state': 'mounted' })
 
             elif str(status)  == '1':
-                return jsonify({'volume_state': 'unmounted' })
+                return json.dumps({'volume_state': 'unmounted' })
 
             else:
-                return jsonify({'volume_state': 'unavailable', 'output': stdout, 'stderr': stderr})
+                return json.dumps({'volume_state': 'unavailable', 'output': stdout, 'stderr': stderr})
 
 
     def nfs_restart(self):
 
-        api_logger.debug(f'Restarting NFS on: {self.distro_id}')
+        sudo = which('sudo')
 
+        api_logger.debug(f'Restarting NFS on: {self.distro_id}')
+        
         if self.distro_id == 'centos':
-            restart_command = 'sudo systemctl restart nfs-server'
+            restart_command = f'{sudo} systemctl restart nfs-server'
         elif self.distro_id == 'ubuntu':
-            restart_command = 'sudo systemctl restart nfs-kernel-server'
+            restart_command = f'{sudo} systemctl restart nfs-kernel-server'
         else:
             restart_command = ''
         
         api_logger.debug(restart_command)
 
-        status, stdout, stderr = run_command(restart_command)
+        stdout, stderr, status = run_command(restart_command)
 
         api_logger.debug(f'NFS status: {status}')
         api_logger.debug(f'NFS status stdout: {stdout}')
@@ -194,9 +224,11 @@ class master:
 
     def docker_restart(self):
 
-        restart_command = 'sudo systemctl restart docker'
+        sudo = which('sudo')
 
-        status, stdout, stderr = run_command(restart_command)
+        restart_command = f'{sudo} systemctl restart docker'
+
+        stdout, stderr, status = run_command(restart_command)
 
         api_logger.debug(f'Docker service status: {status}')
         api_logger.debug(f'Docker service stdout: {stdout}')
@@ -213,6 +245,10 @@ class wn:
 
     
     def write_api_config(self, luks_cryptdev_file='/etc/luks/luks-cryptdev.ini'):
+
+        luks_dir = os.path.dirname(luks_cryptdev_file)
+        if not os.path.exists(luks_dir):
+            os.mkdir(luks_dir)
 
         config = ConfigParser()
         config.read(luks_cryptdev_file)
@@ -271,24 +307,27 @@ class wn:
 
         api_logger.debug(self.nfs_mountpoint_list)
         if self.check_status():
-            return jsonify({'nfs_state':'mounted'})
+            return json.dumps({'nfs_state':'mounted'})
         else:
-            return jsonify({'nfs_state':'unmounted'})
+            return json.dumps({'nfs_state':'unmounted'})
 
 
     def nfs_mount(self):
 
+        #sudo = which('sudo')
+        mount = which('mount')
+
         if self.check_status():
-            return jsonify({'nfs_state':'mounted'})
+            return json.dumps({'nfs_state':'mounted'})
         
-        mount_command = 'sudo mount -a -t nfs'
+        for mountpoint in self.nfs_mountpoint_list:
+            #mount_command = f'{sudo} mount -a -t nfs'
+            mount_command = f'{mount} {mountpoint}'
+            api_logger.debug(mount_command)
+            stdout, stderr, status = run_command(mount_command)
 
-        api_logger.debug(mount_command)
-
-        status, stdout, stderr = run_command(mount_command)
-
-        api_logger.debug(f'NFS mount subprocess call status: {status}')
-        api_logger.debug(f'NFS mount subprocess call stdout: {stdout}')
-        api_logger.debug(f'NFS mount subprocess call stderr: {stderr}')
+            api_logger.debug(f'NFS mount subprocess call status: {status}')
+            api_logger.debug(f'NFS mount subprocess call stdout: {stdout}')
+            api_logger.debug(f'NFS mount subprocess call stderr: {stderr}')
 
         return self.get_status()
