@@ -45,7 +45,7 @@ if __name__ == '__main__':
     options = cli_options()
 
     if options.version is True:
-        print('fastluks package: ' + __version__)
+        print('pyluks package: ' + __version__)
     else:
         encrypt_and_setup(options.device_name, options.cryptdev, options.mountpoint, options.filesystem,
                           options.cipher_algorithm, options.keysize, options.hash_algorithm,

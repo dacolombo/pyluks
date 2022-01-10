@@ -46,6 +46,6 @@ if __name__ == '__main__':
     options = cli_options()
 
     if options.version is True:
-        print('fastluks package: ' + __version__)
+        print('pyluks package: ' + __version__)
     else:
         options.luksctl_function()
