@@ -4,7 +4,7 @@ import logging
 
 #__________________________________
 # Function to run bash commands
-def run_command(cmd, LOGFILE=None):
+def run_command(cmd, logger=None):
     """
     Run subprocess call redirecting stdout, stderr and the command exit code.
     """
@@ -14,9 +14,8 @@ def run_command(cmd, LOGFILE=None):
     status = proc.wait()
 
     # Functionality to replicate cmd >> "$LOGFILE" 2>&1
-    if LOGFILE != None:
-        with open(LOGFILE, 'a+') as log:
-            log.write(f'{stdout}\n{stderr}')
+    if logger != None:
+        logger.debug(f'Command: {cmd}\nStdout: {stdout}\nStderr: {stderr}')
     
     return stdout, stderr, status
 
@@ -34,7 +33,7 @@ def create_logger(logfile, name):
 
     # Create logger
     logger = logging.getLogger(name)
-    logger.setLevel(0)
+    logger.setLevel(logging.DEBUG)
     logger.addHandler(handler)
 
     return logger
