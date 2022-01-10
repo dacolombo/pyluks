@@ -8,7 +8,9 @@ import argparse
 from pyluks import __version__
 from pyluks.luksctl_api import __path__ as luksctl_api_path_list
 from pyluks.luksctl_api import __prefix__ as environment_prefix
-from pyluks.luksctl_api.luksctl_run import master, wn, LOGFILE
+from pyluks.luksctl_api.luksctl_run import master, wn
+from pyluks.luksctl_api.luksctl_run import LOGFILE as LOGFILE_api
+from pyluks.luksctl.luksctl_lib import LOGFILE as LOGFILE_luksctl
 
 
 ################################################################################
@@ -36,7 +38,7 @@ def cli_options():
 
     wn_parser = subparsers.add_parser('wn')
     wn_parser.add_argument('--nfs-mountpoint-list', nargs='*', dest='nfs_mountpoint_list', help='NFS mountpoint list')
-    wn_parser.add_argument('--user', dest='user', default='luksctl_api', help='luksctl-api service user')
+    wn_parser.add_argument('--user', dest='user', default='luksctl_api_wn', help='luksctl-api service user')
     wn_parser.set_defaults(setup_function=wn_setup)
 
     return parser.parse_args()
@@ -59,7 +61,8 @@ def master_setup(options):
                                         ssl=options.ssl, user=options.user,
                                         group=options.user)
     
-    shutil.chown(path=LOGFILE, user=options.user, group=options.user)
+    shutil.chown(path=LOGFILE_api, user=options.user, group=options.user)
+    shutil.chown(path=LOGFILE_luksctl, user=options.user, group=options.user)
 
 
 def wn_setup(options):
@@ -72,8 +75,8 @@ def wn_setup(options):
                                     environment_prefix=environment_prefix,
                                     user=options.user, group=options.user)
 
-    shutil.chown(path=LOGFILE, user=options.user, group=options.user)
-
+    shutil.chown(path=LOGFILE_api, user=options.user, group=options.user)   
+    shutil.chown(path=LOGFILE_luksctl, user=options.user, group=options.user)
 
 
 ################################################################################
@@ -83,6 +86,6 @@ if __name__ == "__main__":
     options = cli_options()
 
     if options.version:
-        print('fastluks package: ' + __version__)
+        print('pyluks package: ' + __version__)
     else:
         options.setup_function(options)
