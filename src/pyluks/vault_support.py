@@ -21,7 +21,7 @@ def write_secret_to_vault(vault_url, wrapping_token, secret_path, key, value):
 
 
 #____________________________________
-def read_secret(vault_url, wrapping_token, path, secret_key, secret_root):
+def read_secret(vault_url, wrapping_token, secret_root, secret_path, secret_key):
     
     # Instantiate the hvac.Client class
     vault_client = hvac.Client(vault_url, verify=False)
@@ -31,7 +31,7 @@ def read_secret(vault_url, wrapping_token, path, secret_key, secret_root):
     assert vault_client.is_authenticated()
 
     # Read secret
-    read_response = client.secrets.kv.read_secret_version(path=path, mount_point=secret_root)
+    read_response = vault_client.secrets.kv.read_secret_version(path=path, mount_point=secret_root)
     secret = read_response['data']['data'][secret_key]
 
     # Logout and revoke current token
