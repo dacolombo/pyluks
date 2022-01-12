@@ -5,6 +5,7 @@ click==8.0.3
 cryptography==36.0.1
 distro==1.6.0
 Flask==2.0.2
+Flask-Cors==3.0.10
 gunicorn==20.1.0
 hvac==0.11.2
 idna==3.3

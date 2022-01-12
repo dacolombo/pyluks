@@ -1,5 +1,6 @@
 # Import dependencies
 from flask import Flask, request, abort
+from flask_cors import CORS, cross_origin
 import json
 import os
 import logging
@@ -14,6 +15,8 @@ from .luksctl_run import master, api_logger
 # APP CONFIGS
 
 app = Flask(__name__)
+cors = CORS(app)
+app.config['CORS_HEADERS'] = 'Content-Type'
 
 # Load configs
 luks_cryptdev_file = '/etc/luks/luks-cryptdev.ini'
@@ -43,6 +46,7 @@ else:
 
 #______________________________________
 @app.route('/luksctl_api/v1.0/status', methods=['GET'])
+@cross_origin()
 def get_status():
     
     return master_node.get_status()
@@ -50,6 +54,7 @@ def get_status():
 
 #______________________________________
 @app.route('/luksctl_api/v1.0/open', methods=['POST'])
+@cross_origin()
 def luksopen():
 
     if not request.json or \
